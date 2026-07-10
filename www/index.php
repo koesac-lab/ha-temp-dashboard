@@ -44,7 +44,18 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     max-width: 900px;
     margin: 0 auto;
   }
-  h1 { font-size: 1.5rem; margin-bottom: 16px; letter-spacing: -0.02em; }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
+  .topbar a {
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
   .controls {
     display: flex;
     flex-wrap: wrap;
@@ -77,12 +88,8 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     max-height: 0;
     transition: max-height 0.3s ease;
   }
-  .sensor-drawer.open {
-    max-height: 700px;
-  }
-  .sensor-drawer-inner {
-    padding: 16px;
-  }
+  .sensor-drawer.open { max-height: 700px; }
+  .sensor-drawer-inner { padding: 16px; }
   .sensor-item {
     display: flex;
     align-items: center;
@@ -92,8 +99,7 @@ if (file_exists(__DIR__ . '/config.local.php')) {
   }
   .sensor-item:last-child { border-bottom: none; }
   .sensor-item input[type="checkbox"] {
-    width: 20px; height: 20px; accent-color: var(--accent);
-    flex-shrink: 0;
+    width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0;
   }
   .sensor-item label { flex: 1; font-size: 0.95rem; word-break: break-word; }
   .sensor-item .unit { color: var(--text2); font-size: 0.85rem; flex-shrink: 0; margin-left: 8px; }
@@ -106,11 +112,7 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     height: 60vh;
     min-height: 300px;
   }
-  .status {
-    font-size: 0.85rem;
-    color: var(--text2);
-    margin-top: 8px;
-  }
+  .status { font-size: 0.85rem; color: var(--text2); margin-top: 8px; }
   .spinner {
     display: inline-block;
     width: 16px; height: 16px;
@@ -130,15 +132,19 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 </style>
 </head>
 <body>
-  <h1>Home Temperature</h1>
+
+  <div class="topbar">
+    <h1>Home Temperature</h1>
+    <a href="settings.php">⚙ Settings</a>
+  </div>
 
   <div class="controls">
     <button class="primary" id="toggleSensors">Sensors</button>
     <select id="days">
       <option value="1">1 day</option>
-      <option value="7" selected>7 days</option>
-      <option value="14">14 days</option>
-      <option value="30">30 days</option>
+      <option value="7" <?= $config['default_days'] == 7 ? 'selected' : '' ?>>7 days</option>
+      <option value="14" <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14 days</option>
+      <option value="30" <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
     </select>
     <button id="updateBtn" class="primary">Update</button>
   </div>
@@ -160,7 +166,7 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 
 <script>
 const defaultSensors = <?= json_encode($config['default_sensors']) ?>;
-const defaultDays = <?= $config['default_days'] ?>;
+const defaultDays = <?= intval($config['default_days']) ?>;
 let chart = null;
 let selectedSensors = new Set(defaultSensors);
 
@@ -208,10 +214,7 @@ document.getElementById('days').addEventListener('change', updateChart);
 async function updateChart() {
   const days = document.getElementById('days').value;
   const ids = Array.from(selectedSensors).join(',');
-  if (!ids) {
-    setStatus('Select at least one sensor');
-    return;
-  }
+  if (!ids) { setStatus('Select at least one sensor'); return; }
   setStatus('Loading...');
   try {
     const res = await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
@@ -232,34 +235,21 @@ function setStatus(msg) {
 function renderChart(haData, days) {
   const ctx = document.getElementById('chart').getContext('2d');
   const colors = ['#0071e3','#ff9500','#34c759','#ff3b30','#af52de','#5856d6'];
-
   const datasets = [];
   haData.forEach((sensorArr, idx) => {
     if (!sensorArr || !sensorArr.length) return;
-    const entityId = sensorArr[0].entity_id;
-    const label = sensorArr[0].attributes?.friendly_name || entityId;
-    const points = sensorArr.map(p => ({
-      x: p.last_changed,
-      y: parseFloat(p.state)
-    })).filter(p => !isNaN(p.y));
-
+    const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
+    const points = sensorArr.map(p => ({ x: p.last_changed, y: parseFloat(p.state) })).filter(p => !isNaN(p.y));
     datasets.push({
       label,
       data: points,
       borderColor: colors[idx % colors.length],
       backgroundColor: colors[idx % colors.length] + '20',
-      fill: true,
-      tension: 0.4,
-      pointRadius: 0,
-      pointHitRadius: 10,
-      borderWidth: 2,
+      fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 10, borderWidth: 2,
     });
   });
-
   if (chart) chart.destroy();
-
   const dark = isDark();
-
   chart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
@@ -270,16 +260,12 @@ function renderChart(haData, days) {
       plugins: {
         legend: { position: 'top', labels: { color: dark ? '#f5f5f7' : '#1d1d1f', usePointStyle: true, boxWidth: 8 } },
         tooltip: {
-          backgroundColor: dark ? '#1c1c1e' : '#ffffff',
+          backgroundColor: dark ? '#1c1c1e' : '#fff',
           titleColor: dark ? '#f5f5f7' : '#1d1d1f',
           bodyColor: dark ? '#f5f5f7' : '#1d1d1f',
           borderColor: dark ? '#38383a' : '#d2d2d7',
-          borderWidth: 1,
-          padding: 10,
-          displayColors: true,
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}°`
-          }
+          borderWidth: 1, padding: 10, displayColors: true,
+          callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}°` }
         }
       },
       scales: {
@@ -308,7 +294,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     chart.options.scales.y.grid.color = dark ? '#38383a' : '#e5e5e5';
     chart.options.scales.y.ticks.color = dark ? '#8e8e93' : '#86868b';
     chart.options.scales.y.title.color = dark ? '#8e8e93' : '#86868b';
-    chart.options.plugins.tooltip.backgroundColor = dark ? '#1c1c1e' : '#ffffff';
+    chart.options.plugins.tooltip.backgroundColor = dark ? '#1c1c1e' : '#fff';
     chart.options.plugins.tooltip.titleColor = dark ? '#f5f5f7' : '#1d1d1f';
     chart.options.plugins.tooltip.bodyColor = dark ? '#f5f5f7' : '#1d1d1f';
     chart.options.plugins.tooltip.borderColor = dark ? '#38383a' : '#d2d2d7';
@@ -319,7 +305,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 if (defaultSensors.length) {
   updateChart();
 } else {
-  setStatus('Tap Sensors to choose defaults');
+  setStatus('Tap Sensors to choose defaults, or go to ⚙ Settings');
 }
 </script>
 </body>
