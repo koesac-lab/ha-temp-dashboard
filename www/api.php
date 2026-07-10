@@ -7,10 +7,14 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     $config = require __DIR__ . '/config.php';
 }
 
-function ha_get($endpoint, $params = []) {
+function ha_get($endpoint, $params = [], $flags = []) {
     global $config;
     $url = rtrim($config['ha_url'], '/') . $endpoint;
-    if (!empty($params)) $url .= '?' . http_build_query($params);
+    $qs  = [];
+    foreach ($params as $k => $v) $qs[] = urlencode($k) . '=' . urlencode($v);
+    foreach ($flags  as $f)       $qs[] = urlencode($f);          // bare flags, no =value
+    if ($qs) $url .= '?' . implode('&', $qs);
+
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -41,15 +45,18 @@ function save_config($new_config) {
     return file_put_contents(__DIR__ . '/config.local.php', $php) !== false;
 }
 
-// Fetch one 30-day (or shorter) history window and accumulate into $raw / $names.
+function ts(DateTime $dt) {
+    return $dt->format('Y-m-d\TH:i:s\Z'); // always UTC Z
+}
+
+// Fetch one history window and accumulate into &$raw / &$names.
 function fetch_chunk($entity_ids, $start, $end, &$raw, &$names) {
     $ids  = array_map('trim', explode(',', $entity_ids));
-    $data = ha_get('/api/history/period/' . $start->format('Y-m-d\TH:i:s\Z'), [
-        'filter_entity_id' => $entity_ids,
-        'end_time'         => $end->format('Y-m-d\TH:i:s\Z'),
-        'minimal_response' => '',
-        'no_attributes'    => '',
-    ]);
+    $data = ha_get(
+        '/api/history/period/' . ts($start),
+        ['filter_entity_id' => $entity_ids, 'end_time' => ts($end)],
+        ['minimal_response', 'no_attributes']
+    );
     if (!is_array($data)) return;
     foreach ($data as $i => $arr) {
         if (empty($arr)) continue;
@@ -138,9 +145,6 @@ if ($action === 'history') {
 }
 
 // ── LTS: chunked history + server-side hourly downsampling ─────────────────────
-// /api/statistics_during_period is WebSocket-only (404 over HTTP REST).
-// Instead: fetch in 30-day chunks with minimal_response + no_attributes,
-// bucket readings into 1-hour slots, return the mean. Same shape as history.
 if ($action === 'lts') {
     $days = max(1, intval($_GET['days'] ?? 90));
     $entity_ids = $_GET['entity_ids'] ?? implode(',', $config['default_sensors']);
@@ -152,12 +156,14 @@ if ($action === 'lts') {
     $chunk = (clone $end)->modify("-{$days} days");
 
     while ($chunk < $end) {
-        $next = min((clone $chunk)->modify('+30 days'), $end);
+        $next = clone $chunk;
+        $next->modify('+30 days');
+        if ($next > $end) $next = clone $end;
         fetch_chunk($entity_ids, $chunk, $next, $raw, $names);
         $chunk = $next;
     }
 
-    // Downsample: floor each reading to its hour bucket, compute mean per bucket
+    // Downsample: floor each reading to its UTC hour bucket, compute mean
     $result = [];
     foreach ($raw as $eid => $points) {
         if (empty($points)) continue;
