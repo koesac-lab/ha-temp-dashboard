@@ -16,154 +16,191 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
 <style>
   :root {
-    --bg: #f5f5f7;
-    --card: #ffffff;
-    --text: #1d1d1f;
-    --text2: #86868b;
-    --accent: #0071e3;
-    --border: #d2d2d7;
-    --radius: 12px;
-    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+    --bg: #f0f0f5;
+    --card: rgba(255,255,255,0.85);
+    --card-solid: #ffffff;
+    --text: #1a1a2e;
+    --text2: #6b7280;
+    --accent: #6366f1;
+    --border: rgba(0,0,0,0.08);
+    --radius: 16px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.07);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.12);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #000000;
-      --card: #1c1c1e;
-      --text: #f5f5f7;
-      --text2: #8e8e93;
-      --accent: #0a84ff;
-      --border: #38383a;
-      --shadow: 0 2px 12px rgba(0,0,0,0.3);
+      --bg: #0f0f13;
+      --card: rgba(255,255,255,0.05);
+      --card-solid: #1a1a24;
+      --text: #f1f1f5;
+      --text2: #6b7280;
+      --accent: #818cf8;
+      --border: rgba(255,255,255,0.08);
+      --shadow: 0 4px 24px rgba(0,0,0,0.3);
+      --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
     }
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 16px;
-    max-width: 900px;
-    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    overflow-x: hidden;
   }
+
   .topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    padding: 16px 20px;
+    flex-shrink: 0;
   }
-  h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
-  .topbar a {
-    color: var(--text2);
-    text-decoration: none;
-    font-size: 0.9rem;
-  }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  button, select {
-    border: none;
-    background: var(--card);
-    color: var(--text);
-    padding: 10px 16px;
-    border-radius: var(--radius);
-    font-size: 1rem;
-    box-shadow: var(--shadow);
-    cursor: pointer;
-    border: 1px solid var(--border);
-    -webkit-tap-highlight-color: transparent;
-  }
-  button.primary {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-  }
-  .sensor-drawer {
-    background: var(--card);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    margin-bottom: 16px;
-    overflow: hidden;
-    max-height: 0;
-    transition: max-height 0.3s ease;
-  }
-  .sensor-drawer.open { max-height: 700px; }
-  .sensor-drawer-inner { padding: 16px; }
-  .sensor-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .sensor-item:last-child { border-bottom: none; }
-  .sensor-item input[type="checkbox"] {
-    width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0;
-  }
-  .sensor-item label { flex: 1; font-size: 0.95rem; word-break: break-word; }
-  .sensor-item .unit { color: var(--text2); font-size: 0.85rem; flex-shrink: 0; margin-left: 8px; }
+  .topbar h1 { font-size: 1rem; font-weight: 600; color: var(--text2); letter-spacing: -0.01em; }
+  .topbar a { color: var(--text2); text-decoration: none; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.15s; }
+  .topbar a:hover { opacity: 1; }
+
+  .chart-hero { flex: 1; padding: 0 16px; min-height: 0; }
   .chart-wrap {
     background: var(--card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 12px;
-    position: relative;
-    height: 60vh;
-    min-height: 300px;
+    box-shadow: var(--shadow-lg);
+    padding: 20px 12px 12px;
+    height: 100%;
   }
-  .status { font-size: 0.85rem; color: var(--text2); margin-top: 8px; }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px;
+    flex-shrink: 0;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text);
+    box-shadow: var(--shadow);
+    transition: transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .pill:active { transform: scale(0.96); }
+  .pill.accent { background: var(--accent); color: #fff; border-color: transparent; }
+  select.pill {
+    appearance: none; -webkit-appearance: none;
+    padding-right: 28px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  .spacer { flex: 1; }
+  .status-bar { padding: 0 20px 12px; font-size: 0.78rem; color: var(--text2); min-height: 20px; }
+
+  .drawer-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    z-index: 10;
+  }
+  .drawer-backdrop.open { display: block; }
+
+  .sensor-drawer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card-solid);
+    border-radius: 24px 24px 0 0;
+    box-shadow: var(--shadow-lg);
+    z-index: 20;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    max-height: 70dvh;
+    display: flex; flex-direction: column;
+  }
+  .sensor-drawer.open { transform: translateY(0); }
+  .drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
+  .drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px 10px; flex-shrink: 0;
+  }
+  .drawer-header strong { font-size: 1rem; }
+  .drawer-header button { background: none; border: none; color: var(--accent); font-size: 0.875rem; cursor: pointer; padding: 4px 8px; }
+  .sensor-list { overflow-y: auto; padding: 0 20px 40px; flex: 1; }
+  .sensor-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .sensor-item:last-child { border-bottom: none; }
+  .sensor-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0; }
+  .sensor-item label { flex: 1; font-size: 0.95rem; }
+  .sensor-item .val { font-size: 0.875rem; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+
   .spinner {
-    display: inline-block;
-    width: 16px; height: 16px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-left: 8px;
-    vertical-align: middle;
+    display: inline-block; width: 13px; height: 13px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    vertical-align: middle; margin-right: 5px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
   @media (min-width: 600px) {
-    body { padding: 24px; }
-    h1 { font-size: 1.8rem; }
-    .chart-wrap { padding: 16px; }
+    .chart-hero { padding: 0 24px; }
+    .controls, .topbar { padding-left: 24px; padding-right: 24px; }
+    .sensor-drawer { left: auto; right: 24px; bottom: 24px; width: 360px; border-radius: 24px; max-height: 60dvh; }
   }
 </style>
 </head>
 <body>
 
   <div class="topbar">
-    <h1>Home Temperature</h1>
+    <h1>&#127777; Home Temperature</h1>
     <a href="settings.php">&#9881; Settings</a>
   </div>
 
+  <div class="chart-hero">
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
   <div class="controls">
-    <button class="primary" id="toggleSensors">Sensors</button>
-    <select id="days">
+    <button class="pill accent" id="toggleSensors">Sensors</button>
+    <select class="pill" id="days">
       <option value="1">1 day</option>
       <option value="7" <?= $config['default_days'] == 7 ? 'selected' : '' ?>>7 days</option>
       <option value="14" <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14 days</option>
       <option value="30" <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
     </select>
-    <button id="updateBtn" class="primary">Update</button>
+    <div class="spacer"></div>
+    <button class="pill" id="updateBtn">&#8635; Refresh</button>
   </div>
+  <p class="status-bar" id="status"></p>
 
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
   <div class="sensor-drawer" id="sensorDrawer">
-    <div class="sensor-drawer-inner">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <strong>Available sensors</strong>
-        <button id="loadSensors" style="padding:6px 12px; font-size:0.9rem;">Load</button>
-      </div>
-      <div id="sensorList"><p class="status">Tap Load to fetch sensors</p></div>
+    <div class="drawer-handle"></div>
+    <div class="drawer-header">
+      <strong>Sensors</strong>
+      <button id="loadSensors">Load list</button>
+    </div>
+    <div class="sensor-list" id="sensorList">
+      <p style="color:var(--text2);font-size:0.9rem;">Tap “Load list” to fetch sensors from Home Assistant.</p>
     </div>
   </div>
-
-  <div class="chart-wrap">
-    <canvas id="chart"></canvas>
-  </div>
-  <p class="status" id="status"></p>
 
 <script>
 const defaultSensors = <?= json_encode($config['default_sensors']) ?>;
@@ -171,12 +208,9 @@ const defaultDays = <?= intval($config['default_days']) ?>;
 let chart = null;
 let selectedSensors = new Set(defaultSensors);
 
-// Set the days dropdown to the saved value
 document.getElementById('days').value = defaultDays;
 
-function isDark() {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
-}
+function isDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
 
 async function savePrefs() {
   try {
@@ -188,18 +222,24 @@ async function savePrefs() {
         default_days: parseInt(document.getElementById('days').value)
       })
     });
-  } catch (e) {
-    console.warn('Could not save prefs:', e);
-  }
+  } catch (e) { console.warn('Could not save prefs:', e); }
 }
 
-document.getElementById('toggleSensors').addEventListener('click', () => {
-  document.getElementById('sensorDrawer').classList.toggle('open');
-});
+function openDrawer() {
+  document.getElementById('sensorDrawer').classList.add('open');
+  document.getElementById('drawerBackdrop').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('sensorDrawer').classList.remove('open');
+  document.getElementById('drawerBackdrop').classList.remove('open');
+}
+
+document.getElementById('toggleSensors').addEventListener('click', openDrawer);
+document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
 
 document.getElementById('loadSensors').addEventListener('click', async () => {
   const list = document.getElementById('sensorList');
-  list.innerHTML = '<div class="spinner"></div>';
+  list.innerHTML = '<span class="spinner"></span> Loading…';
   try {
     const res = await fetch('api.php?action=sensors');
     const sensors = await res.json();
@@ -210,9 +250,9 @@ document.getElementById('loadSensors').addEventListener('click', async () => {
       div.className = 'sensor-item';
       const checked = selectedSensors.has(s.entity_id) ? 'checked' : '';
       div.innerHTML = `
-        <input type="checkbox" id="${s.entity_id}" value="${s.entity_id}" ${checked}>
-        <label for="${s.entity_id}">${s.name}</label>
-        <span class="unit">${parseFloat(s.state).toFixed(1)} ${s.unit}</span>
+        <input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${checked}>
+        <label for="cb_${s.entity_id}">${s.name}</label>
+        <span class="val">${parseFloat(s.state).toFixed(1)}${s.unit}</span>
       `;
       list.appendChild(div);
     });
@@ -224,44 +264,35 @@ document.getElementById('loadSensors').addEventListener('click', async () => {
       });
     });
   } catch (e) {
-    list.innerHTML = '<p class="status">Error loading sensors</p>';
+    list.innerHTML = '<p style="color:var(--text2)">Error loading sensors</p>';
   }
 });
 
-document.getElementById('updateBtn').addEventListener('click', () => {
-  savePrefs();
-  updateChart();
-});
-
-document.getElementById('days').addEventListener('change', () => {
-  savePrefs();
-  updateChart();
-});
+document.getElementById('updateBtn').addEventListener('click', () => { savePrefs(); updateChart(); });
+document.getElementById('days').addEventListener('change', () => { savePrefs(); updateChart(); });
 
 async function updateChart() {
   const days = document.getElementById('days').value;
   const ids = Array.from(selectedSensors).join(',');
   if (!ids) { setStatus('Select at least one sensor'); return; }
-  setStatus('Loading...');
+  setStatus('<span class="spinner"></span> Loading…');
   try {
     const res = await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
     const data = await res.json();
-    if (!Array.isArray(data)) throw new Error('Bad response: ' + JSON.stringify(data));
+    if (!Array.isArray(data)) throw new Error(JSON.stringify(data));
     renderChart(data, days);
     setStatus(`Showing ${days} day(s) \u00b7 ${data.length} sensor(s)`);
   } catch (e) {
-    setStatus('Error loading history: ' + e.message);
+    setStatus('Error: ' + e.message);
     console.error('updateChart error:', e);
   }
 }
 
-function setStatus(msg) {
-  document.getElementById('status').textContent = msg;
-}
+function setStatus(html) { document.getElementById('status').innerHTML = html; }
 
 function renderChart(haData, days) {
   const ctx = document.getElementById('chart').getContext('2d');
-  const colors = ['#0071e3','#ff9500','#34c759','#ff3b30','#af52de','#5856d6'];
+  const colors = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#3b82f6'];
   const datasets = [];
   haData.forEach((sensorArr, idx) => {
     if (!sensorArr || !sensorArr.length) return;
@@ -274,15 +305,16 @@ function renderChart(haData, days) {
       })
       .filter(p => p.y !== null && !isNaN(p.x));
     datasets.push({
-      label,
-      data: points,
+      label, data: points,
       borderColor: colors[idx % colors.length],
-      backgroundColor: colors[idx % colors.length] + '20',
-      fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 10, borderWidth: 2,
+      backgroundColor: colors[idx % colors.length] + '18',
+      fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 12, borderWidth: 2.5,
     });
   });
   if (chart) chart.destroy();
   const dark = isDark();
+  const gridCol = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const tickCol = dark ? '#6b7280' : '#9ca3af';
   chart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
@@ -291,62 +323,43 @@ function renderChart(haData, days) {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { color: dark ? '#f5f5f7' : '#1d1d1f', usePointStyle: true, boxWidth: 8 } },
+        legend: {
+          position: 'top',
+          labels: { color: dark ? '#e5e7eb' : '#374151', usePointStyle: true, pointStyleWidth: 8, boxHeight: 6, padding: 16, font: { size: 12 } }
+        },
         tooltip: {
-          backgroundColor: dark ? '#1c1c1e' : '#fff',
-          titleColor: dark ? '#f5f5f7' : '#1d1d1f',
-          bodyColor: dark ? '#f5f5f7' : '#1d1d1f',
-          borderColor: dark ? '#38383a' : '#d2d2d7',
-          borderWidth: 1, padding: 10, displayColors: true,
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C`
-          }
+          backgroundColor: dark ? 'rgba(15,15,19,0.95)' : 'rgba(255,255,255,0.95)',
+          titleColor: dark ? '#f1f1f5' : '#1a1a2e',
+          bodyColor: dark ? '#d1d5db' : '#4b5563',
+          borderColor: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+          borderWidth: 1, padding: 12, displayColors: true, cornerRadius: 10,
+          callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C` }
         }
       },
       scales: {
         x: {
           type: 'time',
-          time: {
-            tooltipFormat: 'dd MMM HH:mm',
-            displayFormats: { hour: 'HH:mm', day: 'dd MMM' }
-          },
-          grid: { color: dark ? '#38383a' : '#e5e5e5' },
-          ticks: { color: dark ? '#8e8e93' : '#86868b', maxRotation: 0, autoSkip: true }
+          time: { tooltipFormat: 'dd MMM HH:mm', displayFormats: { hour: 'HH:mm', day: 'dd MMM' } },
+          grid: { color: gridCol },
+          border: { display: false },
+          ticks: { color: tickCol, maxRotation: 0, autoSkip: true, font: { size: 11 } }
         },
         y: {
-          grid: { color: dark ? '#38383a' : '#e5e5e5' },
-          ticks: {
-            color: dark ? '#8e8e93' : '#86868b',
-            callback: (val) => val.toFixed(1) + '\u00b0'
-          },
-          title: { display: true, text: 'Temperature (\u00b0C)', color: dark ? '#8e8e93' : '#86868b' }
+          grid: { color: gridCol },
+          border: { display: false },
+          ticks: { color: tickCol, font: { size: 11 }, callback: (v) => v.toFixed(1) + '\u00b0' }
         }
       }
     }
   });
 }
 
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (chart) {
-    const dark = isDark();
-    chart.options.plugins.legend.labels.color = dark ? '#f5f5f7' : '#1d1d1f';
-    chart.options.scales.x.grid.color = dark ? '#38383a' : '#e5e5e5';
-    chart.options.scales.x.ticks.color = dark ? '#8e8e93' : '#86868b';
-    chart.options.scales.y.grid.color = dark ? '#38383a' : '#e5e5e5';
-    chart.options.scales.y.ticks.color = dark ? '#8e8e93' : '#86868b';
-    chart.options.scales.y.title.color = dark ? '#8e8e93' : '#86868b';
-    chart.options.plugins.tooltip.backgroundColor = dark ? '#1c1c1e' : '#fff';
-    chart.options.plugins.tooltip.titleColor = dark ? '#f5f5f7' : '#1d1d1f';
-    chart.options.plugins.tooltip.bodyColor = dark ? '#f5f5f7' : '#1d1d1f';
-    chart.options.plugins.tooltip.borderColor = dark ? '#38383a' : '#d2d2d7';
-    chart.update();
-  }
-});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (chart) updateChart(); });
 
 if (defaultSensors.length) {
   updateChart();
 } else {
-  setStatus('Tap Sensors to choose defaults, or go to \u2699 Settings');
+  setStatus('Tap <strong>Sensors</strong> to get started, or go to &#9881; Settings.');
 }
 </script>
 </body>
