@@ -46,15 +46,17 @@ function save_config($new_config) {
 }
 
 function ts(DateTime $dt) {
-    return $dt->format('Y-m-d\TH:i:s\Z'); // UTC, Z suffix
+    return $dt->format('Y-m-d\TH:i:s\Z');
 }
 
 // Fetch one history window and accumulate into &$raw / &$names.
+// Uses /api/history/period/{start} with the timestamp in the path unencoded,
+// exactly as HA documents it.
 function fetch_chunk($entity_ids, DateTime $start, DateTime $end, &$raw, &$names) {
-    $ids = array_map('trim', explode(',', $entity_ids));
-    // Timestamp in the URL path must be percent-encoded (colons → %3A)
+    $ids  = array_map('trim', explode(',', $entity_ids));
+    // HA expects the start timestamp literally in the path, no encoding
     $data = ha_get(
-        '/api/history/period/' . urlencode(ts($start)),
+        '/api/history/period/' . ts($start),
         ['filter_entity_id' => $entity_ids, 'end_time' => ts($end)],
         ['minimal_response', 'no_attributes']
     );
