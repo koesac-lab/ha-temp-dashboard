@@ -194,7 +194,7 @@ document.getElementById('loadSensors').addEventListener('click', async () => {
       div.innerHTML = `
         <input type="checkbox" id="${s.entity_id}" value="${s.entity_id}" ${checked}>
         <label for="${s.entity_id}">${s.name}</label>
-        <span class="unit">${s.state} ${s.unit}</span>
+        <span class="unit">${parseFloat(s.state).toFixed(1)} ${s.unit}</span>
       `;
       list.appendChild(div);
     });
@@ -241,7 +241,7 @@ function renderChart(haData, days) {
     if (!sensorArr || !sensorArr.length) return;
     const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
     const points = sensorArr
-      .map(p => ({ x: new Date(p.last_changed).getTime(), y: parseFloat(p.state) }))
+      .map(p => ({ x: new Date(p.last_changed).getTime(), y: parseFloat(parseFloat(p.state).toFixed(1)) }))
       .filter(p => !isNaN(p.y) && !isNaN(p.x));
     datasets.push({
       label,
@@ -268,7 +268,9 @@ function renderChart(haData, days) {
           bodyColor: dark ? '#f5f5f7' : '#1d1d1f',
           borderColor: dark ? '#38383a' : '#d2d2d7',
           borderWidth: 1, padding: 10, displayColors: true,
-          callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}°` }
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}°C`
+          }
         }
       },
       scales: {
@@ -283,7 +285,10 @@ function renderChart(haData, days) {
         },
         y: {
           grid: { color: dark ? '#38383a' : '#e5e5e5' },
-          ticks: { color: dark ? '#8e8e93' : '#86868b' },
+          ticks: {
+            color: dark ? '#8e8e93' : '#86868b',
+            callback: (val) => val.toFixed(1) + '°'
+          },
           title: { display: true, text: 'Temperature (°C)', color: dark ? '#8e8e93' : '#86868b' }
         }
       }
