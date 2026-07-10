@@ -4,6 +4,8 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 } else {
     $config = require __DIR__ . '/config.php';
 }
+$latitude  = $config['latitude']  ?? 51.5074;
+$longitude = $config['longitude'] ?? -0.1278;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -52,57 +54,27 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     overflow-x: hidden;
   }
 
-  .hero {
-    display: flex;
-    gap: 20px;
-    padding: 20px 20px 12px;
-    overflow-x: auto;
-    flex-shrink: 0;
-    scrollbar-width: none;
-  }
+  .hero { display: flex; gap: 20px; padding: 20px 20px 12px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
   .hero::-webkit-scrollbar { display: none; }
   .hero-card {
     flex-shrink: 0;
     background: var(--card);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     padding: 14px 18px;
     min-width: 120px;
   }
-  .hero-card .label {
-    font-size: 0.72rem;
-    font-weight: 500;
-    color: var(--text2);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 140px;
-  }
-  .hero-card .temp {
-    font-size: 2rem;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    line-height: 1;
-  }
+  .hero-card .label { font-size: 0.72rem; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+  .hero-card .temp { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
   .hero-card .temp span { font-size: 1rem; font-weight: 400; color: var(--text2); }
-  .hero-empty {
-    padding: 20px 20px 12px;
-    font-size: 0.85rem;
-    color: var(--text2);
-    flex-shrink: 0;
-  }
+  .hero-empty { padding: 20px 20px 12px; font-size: 0.85rem; color: var(--text2); flex-shrink: 0; }
 
   .chart-hero { flex: 1; padding: 0 16px; min-height: 0; }
   .chart-wrap {
     background: var(--card);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow-lg);
@@ -110,61 +82,36 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     height: 100%;
   }
 
-  .controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 20px;
-    flex-shrink: 0;
-  }
+  .controls { display: flex; align-items: center; gap: 8px; padding: 12px 20px; flex-shrink: 0; }
   .pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 16px;
-    border-radius: 999px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
+    display: inline-flex; align-items: center;
+    padding: 8px 16px; border-radius: 999px;
+    font-size: 0.875rem; font-weight: 500; cursor: pointer;
     border: 1px solid var(--border);
     background: var(--card);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    color: var(--text);
-    box-shadow: var(--shadow);
-    transition: transform 0.1s;
-    -webkit-tap-highlight-color: transparent;
-    white-space: nowrap;
-    text-decoration: none;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    color: var(--text); box-shadow: var(--shadow);
+    transition: transform 0.1s; -webkit-tap-highlight-color: transparent;
+    white-space: nowrap; text-decoration: none;
   }
   .pill:active { transform: scale(0.96); }
   .pill.accent { background: var(--accent); color: #fff; border-color: transparent; }
   select.pill {
-    appearance: none; -webkit-appearance: none;
-    padding-right: 28px;
+    appearance: none; -webkit-appearance: none; padding-right: 28px;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
+    background-repeat: no-repeat; background-position: right 10px center;
   }
   .spacer { flex: 1; }
   .status-bar { padding: 0 20px 10px; font-size: 0.78rem; color: var(--text2); min-height: 18px; }
 
-  .drawer-backdrop {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.35);
-    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-    z-index: 10;
-  }
+  .drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 10; }
   .drawer-backdrop.open { display: block; }
   .sensor-drawer {
     position: fixed; bottom: 0; left: 0; right: 0;
-    background: var(--card-solid);
-    border-radius: 24px 24px 0 0;
-    box-shadow: var(--shadow-lg);
-    z-index: 20;
-    transform: translateY(100%);
-    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
-    max-height: 70dvh;
-    display: flex; flex-direction: column;
+    background: var(--card-solid); border-radius: 24px 24px 0 0;
+    box-shadow: var(--shadow-lg); z-index: 20;
+    transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    max-height: 70dvh; display: flex; flex-direction: column;
   }
   .sensor-drawer.open { transform: translateY(0); }
   .drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
@@ -172,21 +119,13 @@ if (file_exists(__DIR__ . '/config.local.php')) {
   .drawer-header strong { font-size: 1rem; flex: 1; }
   .drawer-close { background: none; border: none; color: var(--text2); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; line-height: 1; }
   .sensor-list { overflow-y: auto; padding: 0 20px 40px; flex: 1; }
-  .sensor-item {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 0; border-bottom: 1px solid var(--border);
-  }
+  .sensor-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
   .sensor-item:last-child { border-bottom: none; }
   .sensor-item input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0; }
   .sensor-item label { flex: 1; font-size: 0.95rem; }
-  .sensor-item .val { font-size: 0.875rem; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+  .sensor-item .val { font-size: 0.875rem; font-weight: 600; flex-shrink: 0; }
 
-  .spinner {
-    display: inline-block; width: 13px; height: 13px;
-    border: 2px solid var(--border); border-top-color: var(--accent);
-    border-radius: 50%; animation: spin 0.8s linear infinite;
-    vertical-align: middle; margin-right: 5px;
-  }
+  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 5px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   @media (min-width: 600px) {
@@ -234,7 +173,9 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 
 <script>
 const defaultSensors = <?= json_encode($config['default_sensors']) ?>;
-const defaultDays = <?= intval($config['default_days']) ?>;
+const defaultDays    = <?= intval($config['default_days']) ?>;
+const LOCATION = { lat: <?= floatval($latitude) ?>, lon: <?= floatval($longitude) ?> };
+
 let chart = null;
 let selectedSensors = new Set(defaultSensors);
 let sensorsCache = null;
@@ -243,70 +184,138 @@ document.getElementById('days').value = defaultDays;
 
 function isDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
 
-// Temperature colour scale: cold (blue) -> comfortable (green) -> warm (amber) -> hot (red)
+// ── Solar calculations (NOAA algorithm, no external API) ─────────────────────
+const DEG = Math.PI / 180;
+
+function julianDay(date) {
+  return date.getTime() / 86400000 + 2440587.5;
+}
+
+function solarNoon(jd, lon) {
+  const n = jd - 2451545.0;
+  const L = (280.46 + 0.9856474 * n) % 360;
+  const g = (357.528 + 0.9856003 * n) % 360;
+  const lam = L + 1.915 * Math.sin(g * DEG) + 0.02 * Math.sin(2 * g * DEG);
+  const eps = 23.439 - 0.0000004 * n;
+  const RA = Math.atan2(Math.cos(eps * DEG) * Math.sin(lam * DEG), Math.cos(lam * DEG)) / DEG;
+  const EqT = L - 0.0057183 - RA + 360 * (lon < 0 ? 1 : 0);
+  return 12 - EqT / 15 - lon / 15; // hours UTC
+}
+
+function getSunTimes(date, lat, lon) {
+  // Returns { dawn, sunrise, sunset, dusk } as UTC milliseconds for that date
+  // Uses the horizon angle for sunrise/sunset (-0.833°) and civil twilight (-6°)
+  function hourAngle(alt, lat, decl) {
+    const cosH = (Math.sin(alt * DEG) - Math.sin(lat * DEG) * Math.sin(decl * DEG))
+                 / (Math.cos(lat * DEG) * Math.cos(decl * DEG));
+    if (cosH < -1) return 180;  // midnight sun
+    if (cosH >  1) return null; // polar night
+    return Math.acos(cosH) / DEG;
+  }
+
+  const jd = julianDay(date);
+  const n  = jd - 2451545.0;
+  const L  = (280.46 + 0.9856474 * n) % 360;
+  const g  = (357.528 + 0.9856003 * n) % 360;
+  const lam = L + 1.915 * Math.sin(g * DEG) + 0.02 * Math.sin(2 * g * DEG);
+  const eps  = 23.439 - 0.0000004 * n;
+  const decl = Math.asin(Math.sin(eps * DEG) * Math.sin(lam * DEG)) / DEG;
+  const noon = solarNoon(jd, lon); // hours UTC
+
+  const hSun   = hourAngle(-0.833, lat, decl);
+  const hTwil  = hourAngle(-6,     lat, decl);
+
+  const dayStart = new Date(date); dayStart.setUTCHours(0,0,0,0);
+  const ms = dayStart.getTime();
+
+  const toMs = (h) => h === null ? null : ms + h * 3600000;
+
+  return {
+    dawn:    toMs(hTwil  !== null ? noon - hTwil  / 15 : null),
+    sunrise: toMs(hSun   !== null ? noon - hSun   / 15 : null),
+    sunset:  toMs(hSun   !== null ? noon + hSun   / 15 : null),
+    dusk:    toMs(hTwil  !== null ? noon + hTwil  / 15 : null),
+  };
+}
+
+function buildSolarBands(startMs, endMs, lat, lon) {
+  // Walk day by day and collect bands
+  const bands = [];
+  const start = new Date(startMs); start.setUTCHours(0,0,0,0);
+  const end   = new Date(endMs);
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    const st = getSunTimes(cursor, lat, lon);
+    const { dawn, sunrise, sunset, dusk } = st;
+    const dayMs = cursor.getTime();
+    const nextDayMs = dayMs + 86400000;
+
+    // Night before dawn
+    if (dawn) bands.push({ from: dayMs,    to: dawn,    type: 'night'   });
+    // Civil twilight (dawn -> sunrise)
+    if (dawn && sunrise) bands.push({ from: dawn,    to: sunrise, type: 'twilight' });
+    // Day
+    if (sunrise && sunset) bands.push({ from: sunrise, to: sunset,  type: 'day'     });
+    // Civil twilight (sunset -> dusk)
+    if (sunset && dusk) bands.push({ from: sunset,  to: dusk,    type: 'twilight' });
+    // Night after dusk
+    if (dusk) bands.push({ from: dusk,    to: nextDayMs, type: 'night'   });
+    // Polar night fallback
+    if (!dawn && !sunrise) bands.push({ from: dayMs, to: nextDayMs, type: 'night' });
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return bands;
+}
+
+// ── Temperature colour scale ──────────────────────────────────────────────────
 const TEMP_SCALE = [
-  { t: 10, r: 96,  g: 165, b: 250 },  // blue-400
-  { t: 18, r: 52,  g: 211, b: 153 },  // emerald-400
-  { t: 22, r: 251, g: 191, b: 36  },  // amber-400
-  { t: 26, r: 251, g: 146, b: 60  },  // orange-400
-  { t: 32, r: 239, g: 68,  b: 68  },  // red-500
+  { t: 10, r: 96,  g: 165, b: 250 },
+  { t: 18, r: 52,  g: 211, b: 153 },
+  { t: 22, r: 251, g: 191, b: 36  },
+  { t: 26, r: 251, g: 146, b: 60  },
+  { t: 32, r: 239, g: 68,  b: 68  },
 ];
 
 function tempToRgb(t) {
   if (t <= TEMP_SCALE[0].t) return TEMP_SCALE[0];
-  if (t >= TEMP_SCALE[TEMP_SCALE.length - 1].t) return TEMP_SCALE[TEMP_SCALE.length - 1];
-  for (let i = 0; i < TEMP_SCALE.length - 1; i++) {
-    const a = TEMP_SCALE[i], b = TEMP_SCALE[i + 1];
+  if (t >= TEMP_SCALE[TEMP_SCALE.length-1].t) return TEMP_SCALE[TEMP_SCALE.length-1];
+  for (let i = 0; i < TEMP_SCALE.length-1; i++) {
+    const a = TEMP_SCALE[i], b = TEMP_SCALE[i+1];
     if (t >= a.t && t <= b.t) {
-      const f = (t - a.t) / (b.t - a.t);
-      return {
-        r: Math.round(a.r + f * (b.r - a.r)),
-        g: Math.round(a.g + f * (b.g - a.g)),
-        b: Math.round(a.b + f * (b.b - a.b)),
-      };
+      const f = (t-a.t)/(b.t-a.t);
+      return { r: Math.round(a.r+f*(b.r-a.r)), g: Math.round(a.g+f*(b.g-a.g)), b: Math.round(a.b+f*(b.b-a.b)) };
     }
   }
 }
+function tempToColor(t, alpha=1) { const {r,g,b}=tempToRgb(t); return `rgba(${r},${g},${b},${alpha})`; }
 
-function tempToColor(t, alpha = 1) {
-  const { r, g, b } = tempToRgb(t);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-// Hero card colour based on current temp
-function heroColor(t) { return tempToColor(t); }
-
+// ── Prefs ─────────────────────────────────────────────────────────────────────
 async function savePrefs() {
   try {
     await fetch('api.php?action=save_prefs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        default_sensors: Array.from(selectedSensors),
-        default_days: parseInt(document.getElementById('days').value)
-      })
+      body: JSON.stringify({ default_sensors: Array.from(selectedSensors), default_days: parseInt(document.getElementById('days').value) })
     });
-  } catch (e) { console.warn('Could not save prefs:', e); }
+  } catch(e) { console.warn('Could not save prefs:', e); }
 }
 
+// ── Hero ──────────────────────────────────────────────────────────────────────
 function renderHero(sensorsData) {
   const hero = document.getElementById('heroArea');
-  if (!sensorsData || !sensorsData.length) {
-    hero.innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
-    return;
-  }
+  if (!sensorsData || !sensorsData.length) { hero.innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>'; return; }
   const selected = sensorsData.filter(s => selectedSensors.has(s.entity_id));
   if (!selected.length) { hero.innerHTML = ''; return; }
   hero.innerHTML = '<div class="hero">' + selected.map(s => {
     const val = parseFloat(s.state);
-    const col = isNaN(val) ? 'var(--text2)' : heroColor(val);
-    return `<div class="hero-card">
-      <div class="label">${s.name}</div>
-      <div class="temp" style="color:${col}">${isNaN(val) ? '--' : val.toFixed(1)}<span>\u00b0C</span></div>
-    </div>`;
+    const col = isNaN(val) ? 'var(--text2)' : tempToColor(val);
+    return `<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(val)?'--':val.toFixed(1)}<span>\u00b0C</span></div></div>`;
   }).join('') + '</div>';
 }
 
+// ── Sensor drawer ─────────────────────────────────────────────────────────────
 async function loadSensors() {
   if (sensorsCache) return sensorsCache;
   const res = await fetch('api.php?action=sensors');
@@ -324,41 +333,24 @@ async function populateDrawer() {
     renderHero(sensors);
     list.innerHTML = '';
     sensors.forEach(s => {
-      const div = document.createElement('div');
-      div.className = 'sensor-item';
+      const div = document.createElement('div'); div.className = 'sensor-item';
       const checked = selectedSensors.has(s.entity_id) ? 'checked' : '';
       const val = parseFloat(s.state);
-      const col = isNaN(val) ? 'var(--text2)' : heroColor(val);
-      div.innerHTML = `
-        <input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${checked}>
-        <label for="cb_${s.entity_id}">${s.name}</label>
-        <span class="val" style="color:${col}">${isNaN(val) ? '--' : val.toFixed(1)}\u00b0C</span>
-      `;
+      const col = isNaN(val) ? 'var(--text2)' : tempToColor(val);
+      div.innerHTML = `<input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${checked}><label for="cb_${s.entity_id}">${s.name}</label><span class="val" style="color:${col}">${isNaN(val)?'--':val.toFixed(1)}\u00b0C</span>`;
       list.appendChild(div);
     });
     list.querySelectorAll('input').forEach(cb => {
       cb.addEventListener('change', () => {
-        if (cb.checked) selectedSensors.add(cb.value);
-        else selectedSensors.delete(cb.value);
-        renderHero(sensorsCache);
-        savePrefs();
-        updateChart();
+        if (cb.checked) selectedSensors.add(cb.value); else selectedSensors.delete(cb.value);
+        renderHero(sensorsCache); savePrefs(); updateChart();
       });
     });
-  } catch (e) {
-    list.innerHTML = '<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>';
-  }
+  } catch(e) { list.innerHTML = '<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>'; }
 }
 
-function openDrawer() {
-  document.getElementById('sensorDrawer').classList.add('open');
-  document.getElementById('drawerBackdrop').classList.add('open');
-  populateDrawer();
-}
-function closeDrawer() {
-  document.getElementById('sensorDrawer').classList.remove('open');
-  document.getElementById('drawerBackdrop').classList.remove('open');
-}
+function openDrawer() { document.getElementById('sensorDrawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); populateDrawer(); }
+function closeDrawer() { document.getElementById('sensorDrawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
 
 document.getElementById('toggleSensors').addEventListener('click', openDrawer);
 document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
@@ -366,6 +358,7 @@ document.getElementById('drawerClose').addEventListener('click', closeDrawer);
 document.getElementById('updateBtn').addEventListener('click', () => { savePrefs(); updateChart(); });
 document.getElementById('days').addEventListener('change', () => { savePrefs(); updateChart(); });
 
+// ── Chart update ──────────────────────────────────────────────────────────────
 async function updateChart() {
   const days = document.getElementById('days').value;
   const ids = Array.from(selectedSensors).join(',');
@@ -377,15 +370,80 @@ async function updateChart() {
     if (!Array.isArray(data)) throw new Error(JSON.stringify(data));
     renderChart(data);
     setStatus(`${days} day(s) \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
-  } catch (e) {
-    setStatus('Error: ' + e.message);
-    console.error('updateChart error:', e);
-  }
+  } catch(e) { setStatus('Error: ' + e.message); console.error(e); }
 }
 
 function setStatus(html) { document.getElementById('status').innerHTML = html; }
 
-// Custom plugin: redraws each dataset line as a temperature-mapped gradient stroke
+// ── Day/Night plugin ──────────────────────────────────────────────────────────
+const dayNightPlugin = {
+  id: 'dayNight',
+  beforeDraw(chartInstance) {
+    const { ctx, chartArea: ca, scales } = chartInstance;
+    if (!ca) return;
+    const xScale = scales.x;
+    const xMin = xScale.min, xMax = xScale.max;
+    const dark = isDark();
+
+    const bands = buildSolarBands(xMin, xMax, LOCATION.lat, LOCATION.lon);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ca.left, ca.top, ca.width, ca.height);
+    ctx.clip();
+
+    bands.forEach(band => {
+      const from = Math.max(band.from, xMin);
+      const to   = Math.min(band.to,   xMax);
+      if (to <= from) return;
+
+      const x0 = xScale.getPixelForValue(from);
+      const x1 = xScale.getPixelForValue(to);
+
+      let color;
+      if (band.type === 'night') {
+        color = dark ? 'rgba(0,0,0,0.45)' : 'rgba(15,23,42,0.07)';
+      } else if (band.type === 'twilight') {
+        // Gradient from night edge to day edge
+        const grad = ctx.createLinearGradient(x0, 0, x1, 0);
+        if (band.from < band.to) {
+          // dawn: dark -> light
+          const isDAWN = band.from < (band.from + band.to) / 2;
+          grad.addColorStop(0, dark ? 'rgba(0,0,0,0.45)'   : 'rgba(15,23,42,0.07)');
+          grad.addColorStop(1, dark ? 'rgba(251,146,60,0.06)' : 'rgba(251,191,36,0.10)');
+        }
+        color = grad;
+      } else {
+        color = 'transparent';
+      }
+
+      ctx.fillStyle = color;
+      ctx.fillRect(x0, ca.top, x1 - x0, ca.height);
+    });
+
+    // Draw subtle sunrise/sunset tick lines
+    bands.forEach(band => {
+      if (band.type !== 'twilight') return;
+      // sunrise = end of dawn twilight band, sunset = start of dusk twilight band
+      [band.from, band.to].forEach(ts => {
+        if (ts < xMin || ts > xMax) return;
+        const x = xScale.getPixelForValue(ts);
+        ctx.beginPath();
+        ctx.moveTo(x, ca.top);
+        ctx.lineTo(x, ca.bottom);
+        ctx.strokeStyle = dark ? 'rgba(251,146,60,0.25)' : 'rgba(251,146,60,0.35)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    });
+
+    ctx.restore();
+  }
+};
+
+// ── Temp gradient line plugin ─────────────────────────────────────────────────
 const tempGradientPlugin = {
   id: 'tempGradient',
   beforeDatasetsDraw(chartInstance) {
@@ -398,112 +456,63 @@ const tempGradientPlugin = {
       if (points.length < 2) return;
 
       ctx.save();
-      // Clip to chart area
       const { left, right, top, bottom } = chartInstance.chartArea;
-      ctx.beginPath();
-      ctx.rect(left, top, right - left, bottom - top);
-      ctx.clip();
+      ctx.beginPath(); ctx.rect(left, top, right-left, bottom-top); ctx.clip();
 
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-
-      // Draw segment by segment with colour based on midpoint temperature
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i];
-        const p1 = points[i + 1];
-        if (p0.skip || p1.skip) continue;
-
-        const t0 = rawData[i]?.y ?? 20;
-        const t1 = rawData[i + 1]?.y ?? 20;
-        const tMid = (t0 + t1) / 2;
-
-        // Linear gradient along the segment
-        const grad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
-        grad.addColorStop(0, tempToColor(t0, 1));
-        grad.addColorStop(1, tempToColor(t1, 1));
-
-        ctx.beginPath();
-        // Use the bezier control points Chart.js computed
-        ctx.moveTo(p0.x, p0.y);
-        if (p0.cp2x !== undefined) {
-          ctx.bezierCurveTo(p0.cp2x, p0.cp2y, p1.cp1x, p1.cp1y, p1.x, p1.y);
-        } else {
-          ctx.lineTo(p1.x, p1.y);
-        }
-        ctx.strokeStyle = grad;
-        ctx.stroke();
-      }
-
-      // Soft glow: draw a wider, semi-transparent pass
+      // Glow pass
       ctx.globalAlpha = 0.18;
       ctx.lineWidth = 10;
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i];
-        const p1 = points[i + 1];
-        if (p0.skip || p1.skip) continue;
-        const t0 = rawData[i]?.y ?? 20;
-        const t1 = rawData[i + 1]?.y ?? 20;
-        const grad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
-        grad.addColorStop(0, tempToColor(t0, 1));
-        grad.addColorStop(1, tempToColor(t1, 1));
-        ctx.beginPath();
-        ctx.moveTo(p0.x, p0.y);
-        if (p0.cp2x !== undefined) {
-          ctx.bezierCurveTo(p0.cp2x, p0.cp2y, p1.cp1x, p1.cp1y, p1.x, p1.y);
-        } else {
-          ctx.lineTo(p1.x, p1.y);
-        }
-        ctx.strokeStyle = grad;
-        ctx.stroke();
+      for (let i = 0; i < points.length-1; i++) {
+        const p0=points[i], p1=points[i+1];
+        if (p0.skip||p1.skip) continue;
+        const t0=rawData[i]?.y??20, t1=rawData[i+1]?.y??20;
+        const grad=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
+        grad.addColorStop(0,tempToColor(t0)); grad.addColorStop(1,tempToColor(t1));
+        ctx.beginPath(); ctx.moveTo(p0.x,p0.y);
+        if (p0.cp2x!==undefined) ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
+        else ctx.lineTo(p1.x,p1.y);
+        ctx.strokeStyle=grad; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
       }
 
+      // Main line pass
       ctx.globalAlpha = 1;
+      ctx.lineWidth = 3;
+      for (let i = 0; i < points.length-1; i++) {
+        const p0=points[i], p1=points[i+1];
+        if (p0.skip||p1.skip) continue;
+        const t0=rawData[i]?.y??20, t1=rawData[i+1]?.y??20;
+        const grad=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
+        grad.addColorStop(0,tempToColor(t0)); grad.addColorStop(1,tempToColor(t1));
+        ctx.beginPath(); ctx.moveTo(p0.x,p0.y);
+        if (p0.cp2x!==undefined) ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
+        else ctx.lineTo(p1.x,p1.y);
+        ctx.strokeStyle=grad; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+      }
+
       ctx.restore();
     });
-
-    // Suppress default line rendering
-    chartInstance.data.datasets.forEach((ds, dsIdx) => {
-      chartInstance.getDatasetMeta(dsIdx).dataset.options = {
-        ...chartInstance.getDatasetMeta(dsIdx).dataset.options,
-        borderColor: 'transparent',
-        backgroundColor: 'transparent',
-      };
+    chartInstance.data.datasets.forEach((ds,dsIdx) => {
+      const opts = chartInstance.getDatasetMeta(dsIdx).dataset.options;
+      if (opts) { opts.borderColor='transparent'; opts.backgroundColor='transparent'; }
     });
   }
 };
 
+Chart.register(dayNightPlugin);
 Chart.register(tempGradientPlugin);
 
+// ── Render chart ──────────────────────────────────────────────────────────────
 function renderChart(haData) {
   const ctx = document.getElementById('chart').getContext('2d');
   const datasets = [];
-  const ids = Array.from(selectedSensors);
 
-  haData.forEach((sensorArr) => {
-    if (!sensorArr || !sensorArr.length) return;
-    const entityId = sensorArr[0].entity_id;
-    const label = sensorArr[0].attributes?.friendly_name || entityId;
+  haData.forEach(sensorArr => {
+    if (!sensorArr||!sensorArr.length) return;
+    const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
     const points = sensorArr
-      .map(p => {
-        const ts = luxon.DateTime.fromISO(p.last_changed).toMillis();
-        const val = parseFloat(p.state);
-        return { x: ts, y: isNaN(val) ? null : parseFloat(val.toFixed(1)) };
-      })
-      .filter(p => p.y !== null && !isNaN(p.x));
-
-    datasets.push({
-      label,
-      data: points,
-      borderColor: 'transparent',
-      backgroundColor: 'transparent',
-      fill: false,
-      tension: 0.5,
-      pointRadius: 0,
-      pointHitRadius: 14,
-      borderWidth: 0,
-      spanGaps: false,
-    });
+      .map(p => { const ts=luxon.DateTime.fromISO(p.last_changed).toMillis(); const val=parseFloat(p.state); return {x:ts,y:isNaN(val)?null:parseFloat(val.toFixed(1))}; })
+      .filter(p => p.y!==null && !isNaN(p.x));
+    datasets.push({ label, data: points, borderColor:'transparent', backgroundColor:'transparent', fill:false, tension:0.5, pointRadius:0, pointHitRadius:14, borderWidth:0, spanGaps:false });
   });
 
   if (chart) chart.destroy();
@@ -522,31 +531,27 @@ function renderChart(haData) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: dark ? 'rgba(15,15,19,0.96)' : 'rgba(255,255,255,0.96)',
-          titleColor: dark ? '#f1f1f5' : '#1a1a2e',
-          bodyColor: dark ? '#d1d5db' : '#4b5563',
-          borderColor: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-          borderWidth: 1, padding: 12, displayColors: true, cornerRadius: 10,
+          backgroundColor: dark?'rgba(15,15,19,0.96)':'rgba(255,255,255,0.96)',
+          titleColor: dark?'#f1f1f5':'#1a1a2e',
+          bodyColor: dark?'#d1d5db':'#4b5563',
+          borderColor: dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
+          borderWidth:1, padding:12, displayColors:true, cornerRadius:10,
           callbacks: {
-            labelColor: (ctx) => {
-              const val = ctx.parsed.y;
-              const c = tempToColor(val);
-              return { borderColor: c, backgroundColor: c, borderRadius: 3 };
-            },
-            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C`
+            labelColor: ctx => { const c=tempToColor(ctx.parsed.y); return {borderColor:c,backgroundColor:c,borderRadius:3}; },
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C`
           }
         }
       },
       scales: {
         x: {
-          type: 'time',
-          time: { tooltipFormat: 'dd MMM HH:mm', displayFormats: { hour: 'HH:mm', day: 'dd MMM' } },
-          grid: { color: gridCol }, border: { display: false },
-          ticks: { color: tickCol, maxRotation: 0, autoSkip: true, font: { size: 11 } }
+          type:'time',
+          time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM'}},
+          grid:{color:gridCol}, border:{display:false},
+          ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}}
         },
         y: {
-          grid: { color: gridCol }, border: { display: false },
-          ticks: { color: tickCol, font: { size: 11 }, callback: (v) => v.toFixed(1) + '\u00b0' }
+          grid:{color:gridCol}, border:{display:false},
+          ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'}
         }
       }
     }
@@ -560,8 +565,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
     updateChart();
     try { const sensors = await loadSensors(); renderHero(sensors); } catch(e) {}
   } else {
-    document.getElementById('heroArea').innerHTML =
-      '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
+    document.getElementById('heroArea').innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
   }
 })();
 </script>
