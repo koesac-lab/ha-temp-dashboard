@@ -219,12 +219,12 @@ async function updateChart() {
   try {
     const res = await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
     const data = await res.json();
-    if (!Array.isArray(data)) throw new Error('Bad response');
+    if (!Array.isArray(data)) throw new Error('Bad response: ' + JSON.stringify(data));
     renderChart(data, days);
     setStatus(`Showing ${days} day(s) · ${data.length} sensor(s)`);
   } catch (e) {
-    setStatus('Error loading history');
-    console.error(e);
+    setStatus('Error loading history: ' + e.message);
+    console.error('updateChart error:', e);
   }
 }
 
@@ -272,11 +272,11 @@ function renderChart(haData, days) {
         x: {
           type: 'time',
           time: { tooltipFormat: 'MMM d HH:mm', displayFormats: { day: 'MMM d', hour: 'HH:mm' } },
-          grid: { color: dark ? '#38383a' : '#e5e5e5', drawBorder: false },
+          grid: { color: dark ? '#38383a' : '#e5e5e5' },
           ticks: { color: dark ? '#8e8e93' : '#86868b', maxRotation: 0, autoSkip: true }
         },
         y: {
-          grid: { color: dark ? '#38383a' : '#e5e5e5', drawBorder: false },
+          grid: { color: dark ? '#38383a' : '#e5e5e5' },
           ticks: { color: dark ? '#8e8e93' : '#86868b' },
           title: { display: true, text: 'Temperature', color: dark ? '#8e8e93' : '#86868b' }
         }
