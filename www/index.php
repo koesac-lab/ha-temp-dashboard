@@ -52,7 +52,6 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     overflow-x: hidden;
   }
 
-  /* Hero temps */
   .hero {
     display: flex;
     gap: 20px;
@@ -99,7 +98,6 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     flex-shrink: 0;
   }
 
-  /* Chart */
   .chart-hero { flex: 1; padding: 0 16px; min-height: 0; }
   .chart-wrap {
     background: var(--card);
@@ -112,7 +110,6 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     height: 100%;
   }
 
-  /* Controls */
   .controls {
     display: flex;
     align-items: center;
@@ -151,7 +148,6 @@ if (file_exists(__DIR__ . '/config.local.php')) {
   .spacer { flex: 1; }
   .status-bar { padding: 0 20px 10px; font-size: 0.78rem; color: var(--text2); min-height: 18px; }
 
-  /* Drawer */
   .drawer-backdrop {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.35);
@@ -269,11 +265,8 @@ function renderHero(sensorsData) {
     return;
   }
   const selected = sensorsData.filter(s => selectedSensors.has(s.entity_id));
-  if (!selected.length) {
-    hero.innerHTML = '';
-    return;
-  }
-  hero.innerHTML = '<div class="hero">' + selected.map((s, i) => {
+  if (!selected.length) { hero.innerHTML = ''; return; }
+  hero.innerHTML = '<div class="hero">' + selected.map((s) => {
     const colorIdx = Array.from(selectedSensors).indexOf(s.entity_id);
     const col = COLORS[colorIdx % COLORS.length];
     const val = parseFloat(s.state);
@@ -317,6 +310,7 @@ async function populateDrawer() {
         else selectedSensors.delete(cb.value);
         renderHero(sensorsCache);
         savePrefs();
+        updateChart();
       });
     });
   } catch (e) {
@@ -424,7 +418,6 @@ function renderChart(haData) {
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (chart) updateChart(); });
 
-// Boot: load sensors for hero, then render chart
 (async () => {
   if (defaultSensors.length) {
     updateChart();
