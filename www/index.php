@@ -98,9 +98,11 @@ $longitude = $config['longitude'] ?? -0.1278;
     <button class="pill accent" id="toggleSensors">Sensors</button>
     <select class="pill" id="days">
       <option value="1">1 day</option>
-      <option value="7" <?= $config['default_days'] == 7 ? 'selected' : '' ?>>7 days</option>
-      <option value="14" <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14 days</option>
-      <option value="30" <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
+      <option value="7"   <?= $config['default_days'] ==  7 ? 'selected' : '' ?>>7 days</option>
+      <option value="14"  <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14 days</option>
+      <option value="30"  <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
+      <option value="90"  <?= $config['default_days'] == 90 ? 'selected' : '' ?>>3 months &#x2605;</option>
+      <option value="365" <?= $config['default_days'] == 365 ? 'selected' : '' ?>>1 year &#x2605;</option>
     </select>
     <div class="spacer"></div>
     <button class="pill" id="updateBtn">&#8635;</button>
@@ -118,6 +120,8 @@ $longitude = $config['longitude'] ?? -0.1278;
 const defaultSensors = <?= json_encode($config['default_sensors']) ?>;
 const defaultDays    = <?= intval($config['default_days']) ?>;
 const LOCATION       = { lat: <?= floatval($latitude) ?>, lon: <?= floatval($longitude) ?> };
+// Ranges above this use long-term statistics (hourly means) instead of raw history
+const LTS_THRESHOLD  = 30;
 
 let chart = null;
 let selectedSensors = new Set(defaultSensors);
@@ -126,149 +130,89 @@ let sensorsCache    = null;
 document.getElementById('days').value = defaultDays;
 function isDark() { return window.matchMedia('(prefers-color-scheme:dark)').matches; }
 
-// ─────────────────────────────────────────────────────────────────────
-// Solar math — returns UTC ms timestamps for a given local date
-// ─────────────────────────────────────────────────────────────────────
+// ── Solar math ───────────────────────────────────────────────────────────────────
 const R = Math.PI / 180;
-
 function getSunTimes(utcMidnightMs, lat, lon) {
-  // utcMidnightMs: UTC midnight of the day to compute (Number, ms since epoch)
-  // Returns { dawn, sunrise, sunset, dusk } all as ms since epoch (or null)
-
-  const jd = utcMidnightMs / 86400000 + 2440587.5; // Julian day at midnight
-  const n  = jd - 2451545.0;
-
-  // Mean longitude & anomaly (degrees)
+  const jd  = utcMidnightMs / 86400000 + 2440587.5;
+  const n   = jd - 2451545.0;
   const L   = ((280.46 + 0.9856474 * n) % 360 + 360) % 360;
   const g   = ((357.528 + 0.9856003 * n) % 360 + 360) % 360;
-
-  // Ecliptic longitude
   const lam = L + 1.915 * Math.sin(g * R) + 0.02 * Math.sin(2 * g * R);
-
-  // Obliquity & declination
-  const eps  = 23.439 - 0.0000004 * n;
+  const eps = 23.439 - 0.0000004 * n;
   const decl = Math.asin(Math.sin(eps * R) * Math.sin(lam * R)) / R;
-
-  // Right ascension (keep in same revolution as lam)
-  const RA = Math.atan2(
-    Math.cos(eps * R) * Math.sin(lam * R),
-    Math.cos(lam * R)
-  ) / R;
-
-  // Equation of time (minutes) — proper NOAA formula
-  const diff = ((L - RA) % 360 + 360) % 360;           // 0–360°
-  const EqT  = 4 * (diff <= 180 ? diff : diff - 360);   // ± minutes
-
-  // Solar noon in fractional UTC hours
+  const RA   = Math.atan2(Math.cos(eps * R) * Math.sin(lam * R), Math.cos(lam * R)) / R;
+  const diff = ((L - RA) % 360 + 360) % 360;
+  const EqT  = 4 * (diff <= 180 ? diff : diff - 360);
   const noon = 12 - EqT / 60 - lon / 15;
-
-  // Convert fractional UTC hour offset from midnight to ms
-  const hMs = (h) => utcMidnightMs + h * 3600000;
-
+  const hMs  = (h) => utcMidnightMs + h * 3600000;
   function event(altDeg, rising) {
-    const cosH = (
-      Math.sin(altDeg * R) - Math.sin(lat * R) * Math.sin(decl * R)
-    ) / (Math.cos(lat * R) * Math.cos(decl * R));
-    if (cosH >= 1)  return null;                      // polar night at this altitude
-    if (cosH <= -1) return hMs(rising ? noon-12 : noon+12); // midnight sun
-    const H = Math.acos(cosH) / R;                   // hour angle in degrees
-    return hMs(rising ? noon - H / 15 : noon + H / 15);
+    const cosH = (Math.sin(altDeg*R) - Math.sin(lat*R)*Math.sin(decl*R)) / (Math.cos(lat*R)*Math.cos(decl*R));
+    if (cosH >= 1)  return null;
+    if (cosH <= -1) return hMs(rising ? noon-12 : noon+12);
+    const H = Math.acos(cosH) / R;
+    return hMs(rising ? noon - H/15 : noon + H/15);
   }
-
-  return {
-    dawn:    event(-6,     true),
-    sunrise: event(-0.833, true),
-    sunset:  event(-0.833, false),
-    dusk:    event(-6,     false),
-  };
+  return { dawn: event(-6,true), sunrise: event(-0.833,true), sunset: event(-0.833,false), dusk: event(-6,false) };
 }
-
-// Build an array of {from, to, type, phase} bands as ms timestamps.
-// Each UTC day is split into up to 5 contiguous segments:
-//   midnight→dawn (night), dawn→sunrise (twilight/dawn),
-//   sunrise→sunset (day), sunset→dusk (twilight/dusk), dusk→midnight (night)
 function buildSolarBands(startMs, endMs, lat, lon) {
   const bands = [];
-
-  // Walk UTC days covering the range
-  let cursor = startMs - (startMs % 86400000); // UTC midnight on or before startMs
-
+  let cursor = startMs - (startMs % 86400000);
   while (cursor < endMs) {
-    const dayStart = cursor;
-    const dayEnd   = cursor + 86400000;
+    const dayStart = cursor, dayEnd = cursor + 86400000;
     const { dawn, sunrise, sunset, dusk } = getSunTimes(dayStart, lat, lon);
-
-    // Clamp events to within this UTC day
     const c = (t) => t === null ? null : Math.max(dayStart, Math.min(dayEnd, t));
-    const D  = c(dawn);
-    const Sr = c(sunrise);
-    const Ss = c(sunset);
-    const Dk = c(dusk);
-
+    const D=c(dawn), Sr=c(sunrise), Ss=c(sunset), Dk=c(dusk);
     if (Sr !== null && Ss !== null) {
-      // We have at least a sunrise and sunset
-      const hasTwilight = D !== null && Dk !== null && D < Sr && Ss < Dk;
-
-      if (hasTwilight) {
-        if (dayStart < D)  bands.push({ from: dayStart, to: D,       type: 'night'    });
-                           bands.push({ from: D,        to: Sr,      type: 'twilight', phase: 'dawn' });
-                           bands.push({ from: Sr,       to: Ss,      type: 'day'      });
-                           bands.push({ from: Ss,       to: Dk,      type: 'twilight', phase: 'dusk' });
-        if (Dk < dayEnd)   bands.push({ from: Dk,       to: dayEnd,  type: 'night'    });
+      const hasTwi = D!==null && Dk!==null && D<Sr && Ss<Dk;
+      if (hasTwi) {
+        if (dayStart<D)  bands.push({from:dayStart,to:D,  type:'night'});
+                         bands.push({from:D,  to:Sr, type:'twilight',phase:'dawn'});
+                         bands.push({from:Sr, to:Ss, type:'day'});
+                         bands.push({from:Ss, to:Dk, type:'twilight',phase:'dusk'});
+        if (Dk<dayEnd)   bands.push({from:Dk, to:dayEnd,type:'night'});
       } else {
-        if (dayStart < Sr) bands.push({ from: dayStart, to: Sr,      type: 'night'    });
-                           bands.push({ from: Sr,       to: Ss,      type: 'day'      });
-        if (Ss < dayEnd)   bands.push({ from: Ss,       to: dayEnd,  type: 'night'    });
+        if (dayStart<Sr) bands.push({from:dayStart,to:Sr,type:'night'});
+                         bands.push({from:Sr,to:Ss,type:'day'});
+        if (Ss<dayEnd)   bands.push({from:Ss,to:dayEnd,type:'night'});
       }
     } else {
-      // Polar night or midnight sun
-      const isDayOnly = dawn === null && dusk === null && sunrise === null;
-      bands.push({ from: dayStart, to: dayEnd, type: isDayOnly ? 'day' : 'night' });
+      bands.push({from:dayStart,to:dayEnd,type:(dawn===null&&dusk===null&&sunrise===null)?'night':'day'});
     }
-
     cursor = dayEnd;
   }
-
   return bands;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Temperature colour
-// ─────────────────────────────────────────────────────────────────────
-const TEMP_SCALE = [
-  { t:10, r:96,  g:165, b:250 },
-  { t:18, r:52,  g:211, b:153 },
-  { t:22, r:251, g:191, b:36  },
-  { t:26, r:251, g:146, b:60  },
-  { t:32, r:239, g:68,  b:68  },
+// ── Temperature colour ─────────────────────────────────────────────────────────────
+const TEMP_SCALE=[
+  {t:10,r:96,g:165,b:250},{t:18,r:52,g:211,b:153},
+  {t:22,r:251,g:191,b:36},{t:26,r:251,g:146,b:60},{t:32,r:239,g:68,b:68}
 ];
-function tempToRgb(t) {
-  if (t <= TEMP_SCALE[0].t) return TEMP_SCALE[0];
-  if (t >= TEMP_SCALE[TEMP_SCALE.length-1].t) return TEMP_SCALE[TEMP_SCALE.length-1];
-  for (let i=0;i<TEMP_SCALE.length-1;i++) {
+function tempToRgb(t){
+  if(t<=TEMP_SCALE[0].t)return TEMP_SCALE[0];
+  if(t>=TEMP_SCALE[TEMP_SCALE.length-1].t)return TEMP_SCALE[TEMP_SCALE.length-1];
+  for(let i=0;i<TEMP_SCALE.length-1;i++){
     const a=TEMP_SCALE[i],b=TEMP_SCALE[i+1];
-    if (t>=a.t&&t<=b.t) { const f=(t-a.t)/(b.t-a.t); return {r:Math.round(a.r+f*(b.r-a.r)),g:Math.round(a.g+f*(b.g-a.g)),b:Math.round(a.b+f*(b.b-a.b))}; }
+    if(t>=a.t&&t<=b.t){const f=(t-a.t)/(b.t-a.t);return{r:Math.round(a.r+f*(b.r-a.r)),g:Math.round(a.g+f*(b.g-a.g)),b:Math.round(a.b+f*(b.b-a.b))};}
   }
 }
 function tempToColor(t,alpha=1){const{r,g,b}=tempToRgb(t);return`rgba(${r},${g},${b},${alpha})`;}
 
-// ─────────────────────────────────────────────────────────────────────
-// Prefs / Hero / Drawer
-// ─────────────────────────────────────────────────────────────────────
-async function savePrefs() {
-  try {
+// ── Prefs / Hero / Drawer ───────────────────────────────────────────────────────────
+async function savePrefs(){
+  try{
     await fetch('api.php?action=save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({default_sensors:Array.from(selectedSensors),default_days:parseInt(document.getElementById('days').value)})});
-  } catch(e){console.warn('prefs:',e);}
+  }catch(e){console.warn('prefs:',e);}
 }
-function renderHero(sensorsData) {
+function renderHero(sensorsData){
   const hero=document.getElementById('heroArea');
   if(!sensorsData||!sensorsData.length){hero.innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';return;}
   const sel=sensorsData.filter(s=>selectedSensors.has(s.entity_id));
   if(!sel.length){hero.innerHTML='';return;}
   hero.innerHTML='<div class="hero">'+sel.map(s=>{
     const v=parseFloat(s.state),col=isNaN(v)?'var(--text2)':tempToColor(v);
-    return `<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>\u00b0C</span></div></div>`;
+    return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>\u00b0C</span></div></div>`;
   }).join('')+'</div>';
 }
 async function loadSensors(){
@@ -302,85 +246,79 @@ document.getElementById('drawerClose').addEventListener('click',closeDrawer);
 document.getElementById('updateBtn').addEventListener('click',()=>{savePrefs();updateChart();});
 document.getElementById('days').addEventListener('change',()=>{savePrefs();updateChart();});
 
-// ─────────────────────────────────────────────────────────────────────
-// Day/Night plugin — bands are precomputed in renderChart and stored here
-// so the plugin never has to read xScale.min/max for band generation.
-// ─────────────────────────────────────────────────────────────────────
-let solarBands = [];
+// ── Chart update ───────────────────────────────────────────────────────────────
+async function updateChart(){
+  const days=parseInt(document.getElementById('days').value);
+  const ids=Array.from(selectedSensors).join(',');
+  if(!ids){setStatus('Select at least one sensor');return;}
 
-const dayNightPlugin = {
-  id: 'dayNight',
-  beforeDraw(ci) {
-    const {ctx, chartArea:ca, scales} = ci;
-    if (!ca || !solarBands.length) return;
-    const xs = scales.x;
-    const dark = isDark();
+  const useLTS = days > LTS_THRESHOLD;
+  const endpoint = useLTS
+    ? `api.php?action=lts&days=${days}&entity_ids=${encodeURIComponent(ids)}`
+    : `api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`;
 
-    // Colours chosen to be clearly distinct in both modes
-    const NIGHT    = dark ? 'rgba(20,20,80,0.55)'  : 'rgba(30,41,120,0.08)';
-    const TWIL     = dark ? 'rgba(251,146,60,0.18)' : 'rgba(251,191,36,0.12)';
-    const SR_LINE  = dark ? 'rgba(251,146,60,0.55)' : 'rgba(251,146,60,0.55)';
+  setStatus('<span class="spinner"></span> Loading…');
+  try{
+    const res=await fetch(endpoint);
+    const data=await res.json();
+    if(!Array.isArray(data))throw new Error(JSON.stringify(data));
+    const label = days >= 365 ? '1 year' : days >= 90 ? '3 months' : `${days} day${days>1?'s':''}`;
+    const mode  = useLTS ? ' · hourly averages' : '';
+    renderChart(data);
+    setStatus(`${label}${mode} \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
+  }catch(e){setStatus('Error: '+e.message);console.error(e);}
+}
+function setStatus(html){document.getElementById('status').innerHTML=html;}
 
+// ── Day/Night plugin ───────────────────────────────────────────────────────────────
+let solarBands=[];
+const dayNightPlugin={
+  id:'dayNight',
+  beforeDraw(ci){
+    const{ctx,chartArea:ca,scales}=ci;
+    if(!ca||!solarBands.length)return;
+    const xs=scales.x,dark=isDark();
+    const NIGHT   = dark?'rgba(20,20,80,0.55)' :'rgba(30,41,120,0.08)';
+    const TWIL    = dark?'rgba(251,146,60,0.18)':'rgba(251,191,36,0.12)';
+    const SR_LINE = dark?'rgba(251,146,60,0.55)':'rgba(251,146,60,0.55)';
     ctx.save();
-    ctx.beginPath(); ctx.rect(ca.left, ca.top, ca.width, ca.height); ctx.clip();
-
-    solarBands.forEach(band => {
-      const fromX = xs.getPixelForValue(band.from);
-      const toX   = xs.getPixelForValue(band.to);
-      if (toX <= ca.left || fromX >= ca.right) return; // fully out of view
-      const x0 = Math.max(fromX, ca.left);
-      const x1 = Math.min(toX,   ca.right);
-      const w  = x1 - x0;
-      if (w <= 0) return;
-
-      if (band.type === 'night') {
-        ctx.fillStyle = NIGHT;
-        ctx.fillRect(x0, ca.top, w, ca.height);
-
-      } else if (band.type === 'twilight') {
-        const grad = ctx.createLinearGradient(x0, 0, x1, 0);
-        const isDawn = band.phase === 'dawn';
-        // Dawn:  night-colour → warm glow  (dark to light)
-        // Dusk:  warm glow → night-colour  (light to dark)
-        grad.addColorStop(0, isDawn ? NIGHT : TWIL);
-        grad.addColorStop(1, isDawn ? TWIL  : NIGHT);
-        ctx.fillStyle = grad;
-        ctx.fillRect(x0, ca.top, w, ca.height);
+    ctx.beginPath();ctx.rect(ca.left,ca.top,ca.width,ca.height);ctx.clip();
+    solarBands.forEach(band=>{
+      const fromX=xs.getPixelForValue(band.from),toX=xs.getPixelForValue(band.to);
+      if(toX<=ca.left||fromX>=ca.right)return;
+      const x0=Math.max(fromX,ca.left),x1=Math.min(toX,ca.right),w=x1-x0;
+      if(w<=0)return;
+      if(band.type==='night'){
+        ctx.fillStyle=NIGHT;ctx.fillRect(x0,ca.top,w,ca.height);
+      }else if(band.type==='twilight'){
+        const grad=ctx.createLinearGradient(x0,0,x1,0);
+        const isDawn=band.phase==='dawn';
+        grad.addColorStop(0,isDawn?NIGHT:TWIL);grad.addColorStop(1,isDawn?TWIL:NIGHT);
+        ctx.fillStyle=grad;ctx.fillRect(x0,ca.top,w,ca.height);
       }
-      // 'day' — transparent, no fill
     });
-
-    // Sunrise / sunset dashed lines (edges of 'day' bands)
-    solarBands.forEach(band => {
-      if (band.type !== 'day') return;
-      [band.from, band.to].forEach(ts => {
-        const x = xs.getPixelForValue(ts);
-        if (x < ca.left || x > ca.right) return;
-        ctx.beginPath();
-        ctx.moveTo(x, ca.top); ctx.lineTo(x, ca.bottom);
-        ctx.strokeStyle = SR_LINE;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 5]);
-        ctx.stroke();
-        ctx.setLineDash([]);
+    solarBands.forEach(band=>{
+      if(band.type!=='day')return;
+      [band.from,band.to].forEach(ts=>{
+        const x=xs.getPixelForValue(ts);
+        if(x<ca.left||x>ca.right)return;
+        ctx.beginPath();ctx.moveTo(x,ca.top);ctx.lineTo(x,ca.bottom);
+        ctx.strokeStyle=SR_LINE;ctx.lineWidth=1;ctx.setLineDash([3,5]);ctx.stroke();ctx.setLineDash([]);
       });
     });
-
     ctx.restore();
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────
-// Temperature gradient line plugin
-// ─────────────────────────────────────────────────────────────────────
-const tempGradientPlugin = {
-  id: 'tempGradient',
-  beforeDatasetsDraw(ci) {
-    const ctx = ci.ctx;
+// ── Temperature gradient line plugin ─────────────────────────────────────────────────
+const tempGradientPlugin={
+  id:'tempGradient',
+  beforeDatasetsDraw(ci){
+    const ctx=ci.ctx;
     ci.data.datasets.forEach((ds,di)=>{
       const meta=ci.getDatasetMeta(di);
       if(!meta.visible||!meta.data.length)return;
-      const pts=meta.data, raw=ds.data;
+      const pts=meta.data,raw=ds.data;
       if(pts.length<2)return;
       ctx.save();
       const{left,right,top,bottom}=ci.chartArea;
@@ -399,8 +337,7 @@ const tempGradientPlugin = {
           ctx.strokeStyle=g;ctx.stroke();
         }
       }
-      pass(12,0.15);
-      pass(3,1.0);
+      pass(12,0.15);pass(3,1.0);
       ctx.globalAlpha=1;ctx.restore();
     });
     ci.data.datasets.forEach((_,di)=>{
@@ -413,29 +350,11 @@ const tempGradientPlugin = {
 Chart.register(dayNightPlugin);
 Chart.register(tempGradientPlugin);
 
-// ─────────────────────────────────────────────────────────────────────
-// Chart update & render
-// ─────────────────────────────────────────────────────────────────────
-async function updateChart(){
-  const days=document.getElementById('days').value;
-  const ids=Array.from(selectedSensors).join(',');
-  if(!ids){setStatus('Select at least one sensor');return;}
-  setStatus('<span class="spinner"></span> Loading…');
-  try{
-    const res=await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
-    const data=await res.json();
-    if(!Array.isArray(data))throw new Error(JSON.stringify(data));
-    renderChart(data);
-    setStatus(`${days} day(s) \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
-  }catch(e){setStatus('Error: '+e.message);console.error(e);}
-}
-function setStatus(html){document.getElementById('status').innerHTML=html;}
-
+// ── Render chart ───────────────────────────────────────────────────────────────
 function renderChart(haData){
   const ctx=document.getElementById('chart').getContext('2d');
   const datasets=[];
-  let xMin=Infinity, xMax=-Infinity;
-
+  let xMin=Infinity,xMax=-Infinity;
   haData.forEach(arr=>{
     if(!arr||!arr.length)return;
     const label=arr[0].attributes?.friendly_name||arr[0].entity_id;
@@ -443,32 +362,28 @@ function renderChart(haData){
       .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(1))};} )
       .filter(p=>p.y!==null&&!isNaN(p.x));
     if(pts.length){xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);}
-    datasets.push({label,data:pts,borderColor:'transparent',backgroundColor:'transparent',fill:false,tension:0.5,pointRadius:0,pointHitRadius:14,borderWidth:0,spanGaps:false});
+    datasets.push({label,data:pts,borderColor:'transparent',backgroundColor:'transparent',fill:false,tension:0.4,pointRadius:0,pointHitRadius:14,borderWidth:0,spanGaps:false});
   });
-
-  // Precompute solar bands from actual data range (+ 1 day buffer each side)
   if(xMin<Infinity){
-    solarBands = buildSolarBands(xMin - 86400000, xMax + 86400000, LOCATION.lat, LOCATION.lon);
+    solarBands=buildSolarBands(xMin-86400000,xMax+86400000,LOCATION.lat,LOCATION.lon);
   }
-
   if(chart)chart.destroy();
   const dark=isDark();
   const gridCol=dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
   const tickCol=dark?'#6b7280':'#9ca3af';
-
   chart=new Chart(ctx,{
-    type:'line', data:{datasets},
+    type:'line',data:{datasets},
     options:{
-      responsive:true, maintainAspectRatio:false,
+      responsive:true,maintainAspectRatio:false,
       animation:{duration:600,easing:'easeInOutQuart'},
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{display:false},
         tooltip:{
           backgroundColor:dark?'rgba(15,15,19,0.96)':'rgba(255,255,255,0.96)',
-          titleColor:dark?'#f1f1f5':'#1a1a2e', bodyColor:dark?'#d1d5db':'#4b5563',
+          titleColor:dark?'#f1f1f5':'#1a1a2e',bodyColor:dark?'#d1d5db':'#4b5563',
           borderColor:dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
-          borderWidth:1, padding:12, displayColors:true, cornerRadius:10,
+          borderWidth:1,padding:12,displayColors:true,cornerRadius:10,
           callbacks:{
             labelColor:c=>{const col=tempToColor(c.parsed.y);return{borderColor:col,backgroundColor:col,borderRadius:3};},
             label:c=>` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}\u00b0C`
@@ -476,7 +391,7 @@ function renderChart(haData){
         }
       },
       scales:{
-        x:{type:'time',time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM'}},grid:{color:gridCol},border:{display:false},ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}}},
+        x:{type:'time',time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM',month:'MMM yyyy'}},grid:{color:gridCol},border:{display:false},ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}}},
         y:{grid:{color:gridCol},border:{display:false},ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'}}
       }
     }
@@ -484,12 +399,11 @@ function renderChart(haData){
 }
 
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{if(chart)updateChart();});
-
 (async()=>{
   if(defaultSensors.length){
     updateChart();
     try{const s=await loadSensors();renderHero(s);}catch(e){}
-  } else {
+  }else{
     document.getElementById('heroArea').innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
   }
 })();
