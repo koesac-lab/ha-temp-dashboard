@@ -12,7 +12,7 @@ function ha_get($endpoint, $params = [], $flags = []) {
     $url = rtrim($config['ha_url'], '/') . $endpoint;
     $qs  = [];
     foreach ($params as $k => $v) $qs[] = urlencode($k) . '=' . urlencode($v);
-    foreach ($flags  as $f)       $qs[] = urlencode($f);          // bare flags, no =value
+    foreach ($flags  as $f)       $qs[] = urlencode($f);
     if ($qs) $url .= '?' . implode('&', $qs);
 
     $ch = curl_init($url);
@@ -46,14 +46,15 @@ function save_config($new_config) {
 }
 
 function ts(DateTime $dt) {
-    return $dt->format('Y-m-d\TH:i:s\Z'); // always UTC Z
+    return $dt->format('Y-m-d\TH:i:s\Z'); // UTC, Z suffix
 }
 
 // Fetch one history window and accumulate into &$raw / &$names.
-function fetch_chunk($entity_ids, $start, $end, &$raw, &$names) {
-    $ids  = array_map('trim', explode(',', $entity_ids));
+function fetch_chunk($entity_ids, DateTime $start, DateTime $end, &$raw, &$names) {
+    $ids = array_map('trim', explode(',', $entity_ids));
+    // Timestamp in the URL path must be percent-encoded (colons → %3A)
     $data = ha_get(
-        '/api/history/period/' . ts($start),
+        '/api/history/period/' . urlencode(ts($start)),
         ['filter_entity_id' => $entity_ids, 'end_time' => ts($end)],
         ['minimal_response', 'no_attributes']
     );
