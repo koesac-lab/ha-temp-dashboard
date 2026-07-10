@@ -52,17 +52,54 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     overflow-x: hidden;
   }
 
-  .topbar {
+  /* Hero temps */
+  .hero {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
+    gap: 20px;
+    padding: 20px 20px 12px;
+    overflow-x: auto;
+    flex-shrink: 0;
+    scrollbar-width: none;
+  }
+  .hero::-webkit-scrollbar { display: none; }
+  .hero-card {
+    flex-shrink: 0;
+    background: var(--card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px 18px;
+    min-width: 120px;
+  }
+  .hero-card .label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+  .hero-card .temp {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .hero-card .temp span { font-size: 1rem; font-weight: 400; color: var(--text2); }
+  .hero-empty {
+    padding: 20px 20px 12px;
+    font-size: 0.85rem;
+    color: var(--text2);
     flex-shrink: 0;
   }
-  .topbar h1 { font-size: 1rem; font-weight: 600; color: var(--text2); letter-spacing: -0.01em; }
-  .topbar a { color: var(--text2); text-decoration: none; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.15s; }
-  .topbar a:hover { opacity: 1; }
 
+  /* Chart */
   .chart-hero { flex: 1; padding: 0 16px; min-height: 0; }
   .chart-wrap {
     background: var(--card);
@@ -71,15 +108,16 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow-lg);
-    padding: 20px 12px 12px;
+    padding: 16px 12px 12px;
     height: 100%;
   }
 
+  /* Controls */
   .controls {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 14px 20px;
+    padding: 12px 20px;
     flex-shrink: 0;
   }
   .pill {
@@ -99,6 +137,7 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     transition: transform 0.1s;
     -webkit-tap-highlight-color: transparent;
     white-space: nowrap;
+    text-decoration: none;
   }
   .pill:active { transform: scale(0.96); }
   .pill.accent { background: var(--accent); color: #fff; border-color: transparent; }
@@ -110,8 +149,9 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     background-position: right 10px center;
   }
   .spacer { flex: 1; }
-  .status-bar { padding: 0 20px 12px; font-size: 0.78rem; color: var(--text2); min-height: 20px; }
+  .status-bar { padding: 0 20px 10px; font-size: 0.78rem; color: var(--text2); min-height: 18px; }
 
+  /* Drawer */
   .drawer-backdrop {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,0.35);
@@ -119,7 +159,6 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     z-index: 10;
   }
   .drawer-backdrop.open { display: block; }
-
   .sensor-drawer {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--card-solid);
@@ -133,12 +172,9 @@ if (file_exists(__DIR__ . '/config.local.php')) {
   }
   .sensor-drawer.open { transform: translateY(0); }
   .drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
-  .drawer-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px 10px; flex-shrink: 0;
-  }
-  .drawer-header strong { font-size: 1rem; }
-  .drawer-header button { background: none; border: none; color: var(--accent); font-size: 0.875rem; cursor: pointer; padding: 4px 8px; }
+  .drawer-header { display: flex; align-items: center; padding: 14px 20px 10px; flex-shrink: 0; }
+  .drawer-header strong { font-size: 1rem; flex: 1; }
+  .drawer-close { background: none; border: none; color: var(--text2); font-size: 1.2rem; cursor: pointer; padding: 4px 8px; line-height: 1; }
   .sensor-list { overflow-y: auto; padding: 0 20px 40px; flex: 1; }
   .sensor-item {
     display: flex; align-items: center; gap: 12px;
@@ -159,17 +195,14 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 
   @media (min-width: 600px) {
     .chart-hero { padding: 0 24px; }
-    .controls, .topbar { padding-left: 24px; padding-right: 24px; }
+    .controls, .hero { padding-left: 24px; padding-right: 24px; }
     .sensor-drawer { left: auto; right: 24px; bottom: 24px; width: 360px; border-radius: 24px; max-height: 60dvh; }
   }
 </style>
 </head>
 <body>
 
-  <div class="topbar">
-    <h1>&#127777; Home Temperature</h1>
-    <a href="settings.php">&#9881; Settings</a>
-  </div>
+  <div id="heroArea"></div>
 
   <div class="chart-hero">
     <div class="chart-wrap">
@@ -186,7 +219,8 @@ if (file_exists(__DIR__ . '/config.local.php')) {
       <option value="30" <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
     </select>
     <div class="spacer"></div>
-    <button class="pill" id="updateBtn">&#8635; Refresh</button>
+    <button class="pill" id="updateBtn">&#8635;</button>
+    <a class="pill" href="settings.php">&#9881;</a>
   </div>
   <p class="status-bar" id="status"></p>
 
@@ -195,10 +229,10 @@ if (file_exists(__DIR__ . '/config.local.php')) {
     <div class="drawer-handle"></div>
     <div class="drawer-header">
       <strong>Sensors</strong>
-      <button id="loadSensors">Load list</button>
+      <button class="drawer-close" id="drawerClose">&#215;</button>
     </div>
     <div class="sensor-list" id="sensorList">
-      <p style="color:var(--text2);font-size:0.9rem;">Tap “Load list” to fetch sensors from Home Assistant.</p>
+      <span class="spinner"></span> Loading…
     </div>
   </div>
 
@@ -207,8 +241,11 @@ const defaultSensors = <?= json_encode($config['default_sensors']) ?>;
 const defaultDays = <?= intval($config['default_days']) ?>;
 let chart = null;
 let selectedSensors = new Set(defaultSensors);
+let sensorsCache = null;
 
 document.getElementById('days').value = defaultDays;
+
+const COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#3b82f6'];
 
 function isDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
 
@@ -225,25 +262,43 @@ async function savePrefs() {
   } catch (e) { console.warn('Could not save prefs:', e); }
 }
 
-function openDrawer() {
-  document.getElementById('sensorDrawer').classList.add('open');
-  document.getElementById('drawerBackdrop').classList.add('open');
-}
-function closeDrawer() {
-  document.getElementById('sensorDrawer').classList.remove('open');
-  document.getElementById('drawerBackdrop').classList.remove('open');
+function renderHero(sensorsData) {
+  const hero = document.getElementById('heroArea');
+  if (!sensorsData || !sensorsData.length) {
+    hero.innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
+    return;
+  }
+  const selected = sensorsData.filter(s => selectedSensors.has(s.entity_id));
+  if (!selected.length) {
+    hero.innerHTML = '';
+    return;
+  }
+  hero.innerHTML = '<div class="hero">' + selected.map((s, i) => {
+    const colorIdx = Array.from(selectedSensors).indexOf(s.entity_id);
+    const col = COLORS[colorIdx % COLORS.length];
+    const val = parseFloat(s.state);
+    return `<div class="hero-card">
+      <div class="label">${s.name}</div>
+      <div class="temp" style="color:${col}">${isNaN(val) ? '--' : val.toFixed(1)}<span>\u00b0C</span></div>
+    </div>`;
+  }).join('') + '</div>';
 }
 
-document.getElementById('toggleSensors').addEventListener('click', openDrawer);
-document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
+async function loadSensors() {
+  if (sensorsCache) return sensorsCache;
+  const res = await fetch('api.php?action=sensors');
+  const sensors = await res.json();
+  if (!Array.isArray(sensors)) throw new Error('Bad response');
+  sensorsCache = sensors;
+  return sensors;
+}
 
-document.getElementById('loadSensors').addEventListener('click', async () => {
+async function populateDrawer() {
   const list = document.getElementById('sensorList');
   list.innerHTML = '<span class="spinner"></span> Loading…';
   try {
-    const res = await fetch('api.php?action=sensors');
-    const sensors = await res.json();
-    if (!Array.isArray(sensors)) throw new Error('Bad response');
+    const sensors = await loadSensors();
+    renderHero(sensors);
     list.innerHTML = '';
     sensors.forEach(s => {
       const div = document.createElement('div');
@@ -260,13 +315,28 @@ document.getElementById('loadSensors').addEventListener('click', async () => {
       cb.addEventListener('change', () => {
         if (cb.checked) selectedSensors.add(cb.value);
         else selectedSensors.delete(cb.value);
+        renderHero(sensorsCache);
         savePrefs();
       });
     });
   } catch (e) {
-    list.innerHTML = '<p style="color:var(--text2)">Error loading sensors</p>';
+    list.innerHTML = '<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>';
   }
-});
+}
+
+function openDrawer() {
+  document.getElementById('sensorDrawer').classList.add('open');
+  document.getElementById('drawerBackdrop').classList.add('open');
+  populateDrawer();
+}
+function closeDrawer() {
+  document.getElementById('sensorDrawer').classList.remove('open');
+  document.getElementById('drawerBackdrop').classList.remove('open');
+}
+
+document.getElementById('toggleSensors').addEventListener('click', openDrawer);
+document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
 
 document.getElementById('updateBtn').addEventListener('click', () => { savePrefs(); updateChart(); });
 document.getElementById('days').addEventListener('change', () => { savePrefs(); updateChart(); });
@@ -280,8 +350,8 @@ async function updateChart() {
     const res = await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error(JSON.stringify(data));
-    renderChart(data, days);
-    setStatus(`Showing ${days} day(s) \u00b7 ${data.length} sensor(s)`);
+    renderChart(data);
+    setStatus(`${days} day(s) \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
   } catch (e) {
     setStatus('Error: ' + e.message);
     console.error('updateChart error:', e);
@@ -290,13 +360,16 @@ async function updateChart() {
 
 function setStatus(html) { document.getElementById('status').innerHTML = html; }
 
-function renderChart(haData, days) {
+function renderChart(haData) {
   const ctx = document.getElementById('chart').getContext('2d');
-  const colors = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#3b82f6'];
   const datasets = [];
-  haData.forEach((sensorArr, idx) => {
+  const ids = Array.from(selectedSensors);
+  haData.forEach((sensorArr) => {
     if (!sensorArr || !sensorArr.length) return;
-    const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
+    const entityId = sensorArr[0].entity_id;
+    const colorIdx = ids.indexOf(entityId);
+    const color = COLORS[colorIdx % COLORS.length];
+    const label = sensorArr[0].attributes?.friendly_name || entityId;
     const points = sensorArr
       .map(p => {
         const ts = luxon.DateTime.fromISO(p.last_changed).toMillis();
@@ -306,8 +379,8 @@ function renderChart(haData, days) {
       .filter(p => p.y !== null && !isNaN(p.x));
     datasets.push({
       label, data: points,
-      borderColor: colors[idx % colors.length],
-      backgroundColor: colors[idx % colors.length] + '18',
+      borderColor: color,
+      backgroundColor: color + '15',
       fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 12, borderWidth: 2.5,
     });
   });
@@ -323,10 +396,7 @@ function renderChart(haData, days) {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: dark ? '#e5e7eb' : '#374151', usePointStyle: true, pointStyleWidth: 8, boxHeight: 6, padding: 16, font: { size: 12 } }
-        },
+        legend: { display: false },
         tooltip: {
           backgroundColor: dark ? 'rgba(15,15,19,0.95)' : 'rgba(255,255,255,0.95)',
           titleColor: dark ? '#f1f1f5' : '#1a1a2e',
@@ -340,13 +410,11 @@ function renderChart(haData, days) {
         x: {
           type: 'time',
           time: { tooltipFormat: 'dd MMM HH:mm', displayFormats: { hour: 'HH:mm', day: 'dd MMM' } },
-          grid: { color: gridCol },
-          border: { display: false },
+          grid: { color: gridCol }, border: { display: false },
           ticks: { color: tickCol, maxRotation: 0, autoSkip: true, font: { size: 11 } }
         },
         y: {
-          grid: { color: gridCol },
-          border: { display: false },
+          grid: { color: gridCol }, border: { display: false },
           ticks: { color: tickCol, font: { size: 11 }, callback: (v) => v.toFixed(1) + '\u00b0' }
         }
       }
@@ -356,11 +424,19 @@ function renderChart(haData, days) {
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (chart) updateChart(); });
 
-if (defaultSensors.length) {
-  updateChart();
-} else {
-  setStatus('Tap <strong>Sensors</strong> to get started, or go to &#9881; Settings.');
-}
+// Boot: load sensors for hero, then render chart
+(async () => {
+  if (defaultSensors.length) {
+    updateChart();
+    try {
+      const sensors = await loadSensors();
+      renderHero(sensors);
+    } catch(e) {}
+  } else {
+    document.getElementById('heroArea').innerHTML =
+      '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
+  }
+})();
 </script>
 </body>
 </html>
