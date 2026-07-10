@@ -136,7 +136,7 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 
   <div class="topbar">
     <h1>Home Temperature</h1>
-    <a href="settings.php">⚙ Settings</a>
+    <a href="settings.php">&#9881; Settings</a>
   </div>
 
   <div class="controls">
@@ -222,7 +222,7 @@ async function updateChart() {
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error('Bad response: ' + JSON.stringify(data));
     renderChart(data, days);
-    setStatus(`Showing ${days} day(s) · ${data.length} sensor(s)`);
+    setStatus(`Showing ${days} day(s) \u00b7 ${data.length} sensor(s)`);
   } catch (e) {
     setStatus('Error loading history: ' + e.message);
     console.error('updateChart error:', e);
@@ -241,8 +241,12 @@ function renderChart(haData, days) {
     if (!sensorArr || !sensorArr.length) return;
     const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
     const points = sensorArr
-      .map(p => ({ x: new Date(p.last_changed).getTime(), y: parseFloat(parseFloat(p.state).toFixed(1)) }))
-      .filter(p => !isNaN(p.y) && !isNaN(p.x));
+      .map(p => {
+        const ts = luxon.DateTime.fromISO(p.last_changed).toMillis();
+        const val = parseFloat(p.state);
+        return { x: ts, y: isNaN(val) ? null : parseFloat(val.toFixed(1)) };
+      })
+      .filter(p => p.y !== null && !isNaN(p.x));
     datasets.push({
       label,
       data: points,
@@ -269,7 +273,7 @@ function renderChart(haData, days) {
           borderColor: dark ? '#38383a' : '#d2d2d7',
           borderWidth: 1, padding: 10, displayColors: true,
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}°C`
+            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C`
           }
         }
       },
@@ -287,9 +291,9 @@ function renderChart(haData, days) {
           grid: { color: dark ? '#38383a' : '#e5e5e5' },
           ticks: {
             color: dark ? '#8e8e93' : '#86868b',
-            callback: (val) => val.toFixed(1) + '°'
+            callback: (val) => val.toFixed(1) + '\u00b0'
           },
-          title: { display: true, text: 'Temperature (°C)', color: dark ? '#8e8e93' : '#86868b' }
+          title: { display: true, text: 'Temperature (\u00b0C)', color: dark ? '#8e8e93' : '#86868b' }
         }
       }
     }
@@ -316,7 +320,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 if (defaultSensors.length) {
   updateChart();
 } else {
-  setStatus('Tap Sensors to choose defaults, or go to ⚙ Settings');
+  setStatus('Tap Sensors to choose defaults, or go to \u2699 Settings');
 }
 </script>
 </body>
