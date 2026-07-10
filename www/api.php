@@ -43,7 +43,37 @@ function ha_request($endpoint, $params = []) {
     return $data;
 }
 
+function save_config($new_config) {
+    $target = __DIR__ . '/config.local.php';
+    $php = "<?php\nreturn " . var_export($new_config, true) . ";\n";
+    return file_put_contents($target, $php) !== false;
+}
+
 $action = $_GET['action'] ?? '';
+
+if ($action === 'save_prefs') {
+    $body = json_decode(file_get_contents('php://input'), true);
+    if (!is_array($body)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid body']);
+        exit;
+    }
+    $new = $config;
+    if (isset($body['default_sensors']) && is_array($body['default_sensors'])) {
+        $new['default_sensors'] = array_values(array_filter($body['default_sensors'], 'is_string'));
+    }
+    if (isset($body['default_days'])) {
+        $days = intval($body['default_days']);
+        if ($days >= 1 && $days <= 30) $new['default_days'] = $days;
+    }
+    if (save_config($new)) {
+        echo json_encode(['ok' => true]);
+    } else {
+        http_response_code(500);
+        echo json_encode(['error' => 'Could not write config']);
+    }
+    exit;
+}
 
 if ($action === 'sensors') {
     $states = ha_request('/api/states');
@@ -52,7 +82,7 @@ if ($action === 'sensors') {
         if (strpos($state['entity_id'], 'sensor.') === 0) {
             $unit = $state['attributes']['unit_of_measurement'] ?? '';
             $device_class = $state['attributes']['device_class'] ?? '';
-            if ($device_class === 'temperature' || stripos($unit, '°') !== false || stripos($unit, 'C') !== false || stripos($unit, 'F') !== false) {
+            if ($device_class === 'temperature' || stripos($unit, '\xc2\xb0') !== false || stripos($unit, 'C') !== false || stripos($unit, 'F') !== false) {
                 $sensors[] = [
                     'entity_id' => $state['entity_id'],
                     'name' => $state['attributes']['friendly_name'] ?? $state['entity_id'],
@@ -86,11 +116,11 @@ if ($action === 'history') {
     $start->modify("-{$days} days");
 
     $start_str = $start->format('Y-m-d\TH:i:s\Z');
-    $end_str = $end->format('Y-m-d\TH:i:s\Z');
+    $end_str   = $end->format('Y-m-d\TH:i:s\Z');
 
     $params = [
         'filter_entity_id' => $entity_ids,
-        'end_time' => $end_str,
+        'end_time'         => $end_str,
     ];
 
     $history = ha_request('/api/history/period/' . $start_str, $params);

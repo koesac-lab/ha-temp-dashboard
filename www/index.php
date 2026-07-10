@@ -171,8 +171,26 @@ const defaultDays = <?= intval($config['default_days']) ?>;
 let chart = null;
 let selectedSensors = new Set(defaultSensors);
 
+// Set the days dropdown to the saved value
+document.getElementById('days').value = defaultDays;
+
 function isDark() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+async function savePrefs() {
+  try {
+    await fetch('api.php?action=save_prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        default_sensors: Array.from(selectedSensors),
+        default_days: parseInt(document.getElementById('days').value)
+      })
+    });
+  } catch (e) {
+    console.warn('Could not save prefs:', e);
+  }
 }
 
 document.getElementById('toggleSensors').addEventListener('click', () => {
@@ -202,6 +220,7 @@ document.getElementById('loadSensors').addEventListener('click', async () => {
       cb.addEventListener('change', () => {
         if (cb.checked) selectedSensors.add(cb.value);
         else selectedSensors.delete(cb.value);
+        savePrefs();
       });
     });
   } catch (e) {
@@ -209,8 +228,15 @@ document.getElementById('loadSensors').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('updateBtn').addEventListener('click', updateChart);
-document.getElementById('days').addEventListener('change', updateChart);
+document.getElementById('updateBtn').addEventListener('click', () => {
+  savePrefs();
+  updateChart();
+});
+
+document.getElementById('days').addEventListener('change', () => {
+  savePrefs();
+  updateChart();
+});
 
 async function updateChart() {
   const days = document.getElementById('days').value;
