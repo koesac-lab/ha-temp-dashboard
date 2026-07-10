@@ -11,8 +11,9 @@ if (file_exists(__DIR__ . '/config.local.php')) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Home Temperature</title>
+<script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
 <style>
   :root {
     --bg: #f5f5f7;
@@ -239,7 +240,9 @@ function renderChart(haData, days) {
   haData.forEach((sensorArr, idx) => {
     if (!sensorArr || !sensorArr.length) return;
     const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
-    const points = sensorArr.map(p => ({ x: p.last_changed, y: parseFloat(p.state) })).filter(p => !isNaN(p.y));
+    const points = sensorArr
+      .map(p => ({ x: new Date(p.last_changed).getTime(), y: parseFloat(p.state) }))
+      .filter(p => !isNaN(p.y) && !isNaN(p.x));
     datasets.push({
       label,
       data: points,
@@ -271,14 +274,17 @@ function renderChart(haData, days) {
       scales: {
         x: {
           type: 'time',
-          time: { tooltipFormat: 'MMM d HH:mm', displayFormats: { day: 'MMM d', hour: 'HH:mm' } },
+          time: {
+            tooltipFormat: 'dd MMM HH:mm',
+            displayFormats: { hour: 'HH:mm', day: 'dd MMM' }
+          },
           grid: { color: dark ? '#38383a' : '#e5e5e5' },
           ticks: { color: dark ? '#8e8e93' : '#86868b', maxRotation: 0, autoSkip: true }
         },
         y: {
           grid: { color: dark ? '#38383a' : '#e5e5e5' },
           ticks: { color: dark ? '#8e8e93' : '#86868b' },
-          title: { display: true, text: 'Temperature', color: dark ? '#8e8e93' : '#86868b' }
+          title: { display: true, text: 'Temperature (°C)', color: dark ? '#8e8e93' : '#86868b' }
         }
       }
     }
