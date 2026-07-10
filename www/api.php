@@ -1,7 +1,11 @@
 <?php
 header('Content-Type: application/json');
 
-$config = require __DIR__ . '/config.php';
+if (file_exists(__DIR__ . '/config.local.php')) {
+    $config = require __DIR__ . '/config.local.php';
+} else {
+    $config = require __DIR__ . '/config.php';
+}
 
 function ha_request($endpoint, $params = []) {
     global $config;

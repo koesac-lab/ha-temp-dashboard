@@ -1,5 +1,9 @@
 <?php
-$config = require __DIR__ . '/config.php';
+if (file_exists(__DIR__ . '/config.local.php')) {
+    $config = require __DIR__ . '/config.local.php';
+} else {
+    $config = require __DIR__ . '/config.php';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
