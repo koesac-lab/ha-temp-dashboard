@@ -184,92 +184,119 @@ document.getElementById('days').value = defaultDays;
 
 function isDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
 
-// ── Solar calculations (NOAA algorithm, no external API) ─────────────────────
+// ── Solar calculations ─────────────────────────────────────────────────────────────────
 const DEG = Math.PI / 180;
 
 function julianDay(date) {
+  // date is a Date object; return fractional Julian day number
   return date.getTime() / 86400000 + 2440587.5;
 }
 
+// Return solar noon in fractional UTC hours for a given Julian day & longitude
 function solarNoon(jd, lon) {
-  const n = jd - 2451545.0;
-  const L = (280.46 + 0.9856474 * n) % 360;
-  const g = (357.528 + 0.9856003 * n) % 360;
+  const n   = jd - 2451545.0;
+  const L   = ((280.46 + 0.9856474 * n) % 360 + 360) % 360;   // mean longitude
+  const g   = ((357.528 + 0.9856003 * n) % 360 + 360) % 360;  // mean anomaly
   const lam = L + 1.915 * Math.sin(g * DEG) + 0.02 * Math.sin(2 * g * DEG);
   const eps = 23.439 - 0.0000004 * n;
-  const RA = Math.atan2(Math.cos(eps * DEG) * Math.sin(lam * DEG), Math.cos(lam * DEG)) / DEG;
-  const EqT = L - 0.0057183 - RA + 360 * (lon < 0 ? 1 : 0);
-  return 12 - EqT / 15 - lon / 15; // hours UTC
+  // Right ascension (degrees)
+  const RA  = ((Math.atan2(Math.cos(eps * DEG) * Math.sin(lam * DEG), Math.cos(lam * DEG)) / DEG) % 360 + 360) % 360;
+  // Equation of time in minutes
+  const EqT = 4 * (((L - RA) % 360 + 360) % 360 <= 180
+    ? (L - RA) % 360
+    : (L - RA) % 360 - 360);
+  // Solar noon UTC = 12h - EqT(min)/60 - lon/15
+  return 12 - EqT / 60 - lon / 15;
 }
 
+// Returns { dawn, sunrise, sunset, dusk } as UTC ms timestamps for the given date
 function getSunTimes(date, lat, lon) {
-  // Returns { dawn, sunrise, sunset, dusk } as UTC milliseconds for that date
-  // Uses the horizon angle for sunrise/sunset (-0.833°) and civil twilight (-6°)
-  function hourAngle(alt, lat, decl) {
-    const cosH = (Math.sin(alt * DEG) - Math.sin(lat * DEG) * Math.sin(decl * DEG))
-                 / (Math.cos(lat * DEG) * Math.cos(decl * DEG));
-    if (cosH < -1) return 180;  // midnight sun
-    if (cosH >  1) return null; // polar night
-    return Math.acos(cosH) / DEG;
+  function cosHourAngle(altDeg, latDeg, declDeg) {
+    return (Math.sin(altDeg * DEG) - Math.sin(latDeg * DEG) * Math.sin(declDeg * DEG))
+           / (Math.cos(latDeg * DEG) * Math.cos(declDeg * DEG));
   }
 
-  const jd = julianDay(date);
-  const n  = jd - 2451545.0;
-  const L  = (280.46 + 0.9856474 * n) % 360;
-  const g  = (357.528 + 0.9856003 * n) % 360;
+  const jd  = julianDay(date);
+  const n   = jd - 2451545.0;
+  const L   = ((280.46 + 0.9856474 * n) % 360 + 360) % 360;
+  const g   = ((357.528 + 0.9856003 * n) % 360 + 360) % 360;
   const lam = L + 1.915 * Math.sin(g * DEG) + 0.02 * Math.sin(2 * g * DEG);
-  const eps  = 23.439 - 0.0000004 * n;
+  const eps = 23.439 - 0.0000004 * n;
   const decl = Math.asin(Math.sin(eps * DEG) * Math.sin(lam * DEG)) / DEG;
-  const noon = solarNoon(jd, lon); // hours UTC
+  const noon = solarNoon(jd, lon); // fractional UTC hours
 
-  const hSun   = hourAngle(-0.833, lat, decl);
-  const hTwil  = hourAngle(-6,     lat, decl);
+  // midnight UTC of this date in ms
+  const midnight = new Date(date); midnight.setUTCHours(0, 0, 0, 0);
+  const ms = midnight.getTime();
+  const hToMs = (hOffset) => ms + hOffset * 3600000;
 
-  const dayStart = new Date(date); dayStart.setUTCHours(0,0,0,0);
-  const ms = dayStart.getTime();
-
-  const toMs = (h) => h === null ? null : ms + h * 3600000;
+  function eventMs(altDeg, before) {
+    const cosH = cosHourAngle(altDeg, lat, decl);
+    if (cosH >= 1)  return null;          // polar night for this altitude
+    if (cosH <= -1) return before         // midnight sun: always above horizon
+      ? hToMs(noon - 12)                 //   clamp to chart boundary
+      : hToMs(noon + 12);
+    const H = Math.acos(cosH) / DEG;     // 0–180
+    return hToMs(before ? noon - H / 15 : noon + H / 15);
+  }
 
   return {
-    dawn:    toMs(hTwil  !== null ? noon - hTwil  / 15 : null),
-    sunrise: toMs(hSun   !== null ? noon - hSun   / 15 : null),
-    sunset:  toMs(hSun   !== null ? noon + hSun   / 15 : null),
-    dusk:    toMs(hTwil  !== null ? noon + hTwil  / 15 : null),
+    dawn:    eventMs(-6,     true),
+    sunrise: eventMs(-0.833, true),
+    sunset:  eventMs(-0.833, false),
+    dusk:    eventMs(-6,     false),
   };
 }
 
+// Build an ordered list of { from, to, type } bands covering [startMs, endMs].
+// Iterates one UTC day at a time; each day contributes up to 5 segments:
+//   midnight→dawn (night), dawn→sunrise (twilight), sunrise→sunset (day),
+//   sunset→dusk (twilight), dusk→next-midnight (night).
+// A 'gap' marker is attached so the drawer plugin can identify dawn vs dusk.
 function buildSolarBands(startMs, endMs, lat, lon) {
-  // Walk day by day and collect bands
   const bands = [];
-  const start = new Date(startMs); start.setUTCHours(0,0,0,0);
-  const end   = new Date(endMs);
-  const cursor = new Date(start);
 
-  while (cursor <= end) {
-    const st = getSunTimes(cursor, lat, lon);
-    const { dawn, sunrise, sunset, dusk } = st;
-    const dayMs = cursor.getTime();
-    const nextDayMs = dayMs + 86400000;
+  // Start from the UTC midnight on or before startMs
+  const cursor = new Date(startMs);
+  cursor.setUTCHours(0, 0, 0, 0);
 
-    // Night before dawn
-    if (dawn) bands.push({ from: dayMs,    to: dawn,    type: 'night'   });
-    // Civil twilight (dawn -> sunrise)
-    if (dawn && sunrise) bands.push({ from: dawn,    to: sunrise, type: 'twilight' });
-    // Day
-    if (sunrise && sunset) bands.push({ from: sunrise, to: sunset,  type: 'day'     });
-    // Civil twilight (sunset -> dusk)
-    if (sunset && dusk) bands.push({ from: sunset,  to: dusk,    type: 'twilight' });
-    // Night after dusk
-    if (dusk) bands.push({ from: dusk,    to: nextDayMs, type: 'night'   });
-    // Polar night fallback
-    if (!dawn && !sunrise) bands.push({ from: dayMs, to: nextDayMs, type: 'night' });
+  while (cursor.getTime() < endMs) {
+    const dayStart  = cursor.getTime();
+    const dayEnd    = dayStart + 86400000; // next UTC midnight
+    const { dawn, sunrise, sunset, dusk } = getSunTimes(cursor, lat, lon);
+
+    // Clamp each event to within this UTC day to avoid cross-day bleed
+    const clamp = (t) => t === null ? null : Math.min(Math.max(t, dayStart), dayEnd);
+    const d  = clamp(dawn);
+    const sr = clamp(sunrise);
+    const ss = clamp(sunset);
+    const dk = clamp(dusk);
+
+    if (d !== null && sr !== null && ss !== null && dk !== null) {
+      // Normal day with distinct twilight periods
+      bands.push({ from: dayStart, to: d,       type: 'night'    });
+      bands.push({ from: d,        to: sr,      type: 'twilight', phase: 'dawn' });
+      bands.push({ from: sr,       to: ss,      type: 'day'      });
+      bands.push({ from: ss,       to: dk,      type: 'twilight', phase: 'dusk' });
+      bands.push({ from: dk,       to: dayEnd,  type: 'night'    });
+    } else if (sr !== null && ss !== null) {
+      // Twilight indistinguishable from night (high summer/winter)
+      bands.push({ from: dayStart, to: sr,      type: 'night'    });
+      bands.push({ from: sr,       to: ss,      type: 'day'      });
+      bands.push({ from: ss,       to: dayEnd,  type: 'night'    });
+    } else {
+      // Polar night or midnight sun — fill entire day
+      const type = (dawn === null && dusk === null) ? 'night' : 'day';
+      bands.push({ from: dayStart, to: dayEnd,  type });
+    }
 
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
+
   return bands;
 }
 
-// ── Temperature colour scale ──────────────────────────────────────────────────
+// ── Temperature colour scale ──────────────────────────────────────────────────────
 const TEMP_SCALE = [
   { t: 10, r: 96,  g: 165, b: 250 },
   { t: 18, r: 52,  g: 211, b: 153 },
@@ -277,7 +304,6 @@ const TEMP_SCALE = [
   { t: 26, r: 251, g: 146, b: 60  },
   { t: 32, r: 239, g: 68,  b: 68  },
 ];
-
 function tempToRgb(t) {
   if (t <= TEMP_SCALE[0].t) return TEMP_SCALE[0];
   if (t >= TEMP_SCALE[TEMP_SCALE.length-1].t) return TEMP_SCALE[TEMP_SCALE.length-1];
@@ -305,9 +331,9 @@ async function savePrefs() {
 // ── Hero ──────────────────────────────────────────────────────────────────────
 function renderHero(sensorsData) {
   const hero = document.getElementById('heroArea');
-  if (!sensorsData || !sensorsData.length) { hero.innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>'; return; }
+  if (!sensorsData||!sensorsData.length) { hero.innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>'; return; }
   const selected = sensorsData.filter(s => selectedSensors.has(s.entity_id));
-  if (!selected.length) { hero.innerHTML = ''; return; }
+  if (!selected.length) { hero.innerHTML=''; return; }
   hero.innerHTML = '<div class="hero">' + selected.map(s => {
     const val = parseFloat(s.state);
     const col = isNaN(val) ? 'var(--text2)' : tempToColor(val);
@@ -324,7 +350,6 @@ async function loadSensors() {
   sensorsCache = sensors;
   return sensors;
 }
-
 async function populateDrawer() {
   const list = document.getElementById('sensorList');
   list.innerHTML = '<span class="spinner"></span> Loading…';
@@ -333,11 +358,11 @@ async function populateDrawer() {
     renderHero(sensors);
     list.innerHTML = '';
     sensors.forEach(s => {
-      const div = document.createElement('div'); div.className = 'sensor-item';
+      const div = document.createElement('div'); div.className='sensor-item';
       const checked = selectedSensors.has(s.entity_id) ? 'checked' : '';
       const val = parseFloat(s.state);
       const col = isNaN(val) ? 'var(--text2)' : tempToColor(val);
-      div.innerHTML = `<input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${checked}><label for="cb_${s.entity_id}">${s.name}</label><span class="val" style="color:${col}">${isNaN(val)?'--':val.toFixed(1)}\u00b0C</span>`;
+      div.innerHTML=`<input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${checked}><label for="cb_${s.entity_id}">${s.name}</label><span class="val" style="color:${col}">${isNaN(val)?'--':val.toFixed(1)}\u00b0C</span>`;
       list.appendChild(div);
     });
     list.querySelectorAll('input').forEach(cb => {
@@ -346,12 +371,10 @@ async function populateDrawer() {
         renderHero(sensorsCache); savePrefs(); updateChart();
       });
     });
-  } catch(e) { list.innerHTML = '<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>'; }
+  } catch(e) { list.innerHTML='<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>'; }
 }
-
-function openDrawer() { document.getElementById('sensorDrawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); populateDrawer(); }
+function openDrawer()  { document.getElementById('sensorDrawer').classList.add('open');    document.getElementById('drawerBackdrop').classList.add('open');    populateDrawer(); }
 function closeDrawer() { document.getElementById('sensorDrawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
-
 document.getElementById('toggleSensors').addEventListener('click', openDrawer);
 document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
 document.getElementById('drawerClose').addEventListener('click', closeDrawer);
@@ -361,21 +384,20 @@ document.getElementById('days').addEventListener('change', () => { savePrefs(); 
 // ── Chart update ──────────────────────────────────────────────────────────────
 async function updateChart() {
   const days = document.getElementById('days').value;
-  const ids = Array.from(selectedSensors).join(',');
+  const ids  = Array.from(selectedSensors).join(',');
   if (!ids) { setStatus('Select at least one sensor'); return; }
   setStatus('<span class="spinner"></span> Loading…');
   try {
-    const res = await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
+    const res  = await fetch(`api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`);
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error(JSON.stringify(data));
     renderChart(data);
     setStatus(`${days} day(s) \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
-  } catch(e) { setStatus('Error: ' + e.message); console.error(e); }
+  } catch(e) { setStatus('Error: '+e.message); console.error(e); }
 }
-
 function setStatus(html) { document.getElementById('status').innerHTML = html; }
 
-// ── Day/Night plugin ──────────────────────────────────────────────────────────
+// ── Day/Night background plugin ──────────────────────────────────────────────────────
 const dayNightPlugin = {
   id: 'dayNight',
   beforeDraw(chartInstance) {
@@ -384,6 +406,14 @@ const dayNightPlugin = {
     const xScale = scales.x;
     const xMin = xScale.min, xMax = xScale.max;
     const dark = isDark();
+
+    // Colours — night is distinctly visible in both modes
+    const NIGHT_LIGHT    = 'rgba(30, 41, 80, 0.09)';   // blue-tinted wash
+    const NIGHT_DARK     = 'rgba(10, 10, 40, 0.55)';   // deep indigo
+    const TWIL_NIGHT_L   = 'rgba(30, 41, 80, 0.09)';
+    const TWIL_NIGHT_D   = 'rgba(10, 10, 40, 0.55)';
+    const TWIL_GLOW_L    = 'rgba(251, 191, 36, 0.13)'; // warm amber wash
+    const TWIL_GLOW_D    = 'rgba(251, 146, 60, 0.22)'; // stronger in dark
 
     const bands = buildSolarBands(xMin, xMax, LOCATION.lat, LOCATION.lon);
 
@@ -396,44 +426,42 @@ const dayNightPlugin = {
       const from = Math.max(band.from, xMin);
       const to   = Math.min(band.to,   xMax);
       if (to <= from) return;
-
       const x0 = xScale.getPixelForValue(from);
       const x1 = xScale.getPixelForValue(to);
+      const w  = x1 - x0;
 
-      let color;
       if (band.type === 'night') {
-        color = dark ? 'rgba(0,0,0,0.45)' : 'rgba(15,23,42,0.07)';
-      } else if (band.type === 'twilight') {
-        // Gradient from night edge to day edge
-        const grad = ctx.createLinearGradient(x0, 0, x1, 0);
-        if (band.from < band.to) {
-          // dawn: dark -> light
-          const isDAWN = band.from < (band.from + band.to) / 2;
-          grad.addColorStop(0, dark ? 'rgba(0,0,0,0.45)'   : 'rgba(15,23,42,0.07)');
-          grad.addColorStop(1, dark ? 'rgba(251,146,60,0.06)' : 'rgba(251,191,36,0.10)');
-        }
-        color = grad;
-      } else {
-        color = 'transparent';
-      }
+        ctx.fillStyle = dark ? NIGHT_DARK : NIGHT_LIGHT;
+        ctx.fillRect(x0, ca.top, w, ca.height);
 
-      ctx.fillStyle = color;
-      ctx.fillRect(x0, ca.top, x1 - x0, ca.height);
+      } else if (band.type === 'twilight') {
+        const isDawn = band.phase === 'dawn';
+        const grad   = ctx.createLinearGradient(x0, 0, x1, 0);
+        // Dawn: night-colour → day-glow (left to right)
+        // Dusk: day-glow → night-colour (left to right)
+        const nightCol = dark ? TWIL_NIGHT_D : TWIL_NIGHT_L;
+        const glowCol  = dark ? TWIL_GLOW_D  : TWIL_GLOW_L;
+        grad.addColorStop(0, isDawn ? nightCol : glowCol);
+        grad.addColorStop(1, isDawn ? glowCol  : nightCol);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x0, ca.top, w, ca.height);
+      }
+      // 'day' — transparent, no fill needed
     });
 
-    // Draw subtle sunrise/sunset tick lines
+    // Sunrise / sunset dashed marker lines
     bands.forEach(band => {
-      if (band.type !== 'twilight') return;
-      // sunrise = end of dawn twilight band, sunset = start of dusk twilight band
+      if (band.type !== 'day') return;
+      // The day band's edges are sunrise (from) and sunset (to)
       [band.from, band.to].forEach(ts => {
-        if (ts < xMin || ts > xMax) return;
+        if (ts <= xMin || ts >= xMax) return;
         const x = xScale.getPixelForValue(ts);
         ctx.beginPath();
         ctx.moveTo(x, ca.top);
         ctx.lineTo(x, ca.bottom);
-        ctx.strokeStyle = dark ? 'rgba(251,146,60,0.25)' : 'rgba(251,146,60,0.35)';
+        ctx.strokeStyle = dark ? 'rgba(251,146,60,0.45)' : 'rgba(251,146,60,0.5)';
         ctx.lineWidth = 1;
-        ctx.setLineDash([3, 4]);
+        ctx.setLineDash([3, 5]);
         ctx.stroke();
         ctx.setLineDash([]);
       });
@@ -443,7 +471,7 @@ const dayNightPlugin = {
   }
 };
 
-// ── Temp gradient line plugin ─────────────────────────────────────────────────
+// ── Temperature gradient line plugin ─────────────────────────────────────────────────
 const tempGradientPlugin = {
   id: 'tempGradient',
   beforeDatasetsDraw(chartInstance) {
@@ -451,7 +479,7 @@ const tempGradientPlugin = {
     chartInstance.data.datasets.forEach((ds, dsIdx) => {
       const meta = chartInstance.getDatasetMeta(dsIdx);
       if (!meta.visible || !meta.data.length) return;
-      const points = meta.data;
+      const points  = meta.data;
       const rawData = ds.data;
       if (points.length < 2) return;
 
@@ -459,36 +487,28 @@ const tempGradientPlugin = {
       const { left, right, top, bottom } = chartInstance.chartArea;
       ctx.beginPath(); ctx.rect(left, top, right-left, bottom-top); ctx.clip();
 
-      // Glow pass
-      ctx.globalAlpha = 0.18;
-      ctx.lineWidth = 10;
-      for (let i = 0; i < points.length-1; i++) {
-        const p0=points[i], p1=points[i+1];
-        if (p0.skip||p1.skip) continue;
-        const t0=rawData[i]?.y??20, t1=rawData[i+1]?.y??20;
-        const grad=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
-        grad.addColorStop(0,tempToColor(t0)); grad.addColorStop(1,tempToColor(t1));
-        ctx.beginPath(); ctx.moveTo(p0.x,p0.y);
-        if (p0.cp2x!==undefined) ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
-        else ctx.lineTo(p1.x,p1.y);
-        ctx.strokeStyle=grad; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+      function drawPass(width, alpha) {
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth   = width;
+        ctx.lineJoin    = 'round';
+        ctx.lineCap     = 'round';
+        for (let i = 0; i < points.length-1; i++) {
+          const p0=points[i], p1=points[i+1];
+          if (p0.skip||p1.skip) continue;
+          const t0=rawData[i]?.y??20, t1=rawData[i+1]?.y??20;
+          const grad=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
+          grad.addColorStop(0,tempToColor(t0)); grad.addColorStop(1,tempToColor(t1));
+          ctx.beginPath(); ctx.moveTo(p0.x,p0.y);
+          if (p0.cp2x!==undefined) ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
+          else ctx.lineTo(p1.x,p1.y);
+          ctx.strokeStyle=grad; ctx.stroke();
+        }
       }
 
-      // Main line pass
+      drawPass(12, 0.15); // glow
+      drawPass(3,  1.0);  // main line
+
       ctx.globalAlpha = 1;
-      ctx.lineWidth = 3;
-      for (let i = 0; i < points.length-1; i++) {
-        const p0=points[i], p1=points[i+1];
-        if (p0.skip||p1.skip) continue;
-        const t0=rawData[i]?.y??20, t1=rawData[i+1]?.y??20;
-        const grad=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
-        grad.addColorStop(0,tempToColor(t0)); grad.addColorStop(1,tempToColor(t1));
-        ctx.beginPath(); ctx.moveTo(p0.x,p0.y);
-        if (p0.cp2x!==undefined) ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
-        else ctx.lineTo(p1.x,p1.y);
-        ctx.strokeStyle=grad; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
-      }
-
       ctx.restore();
     });
     chartInstance.data.datasets.forEach((ds,dsIdx) => {
@@ -505,36 +525,34 @@ Chart.register(tempGradientPlugin);
 function renderChart(haData) {
   const ctx = document.getElementById('chart').getContext('2d');
   const datasets = [];
-
   haData.forEach(sensorArr => {
     if (!sensorArr||!sensorArr.length) return;
-    const label = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
+    const label  = sensorArr[0].attributes?.friendly_name || sensorArr[0].entity_id;
     const points = sensorArr
       .map(p => { const ts=luxon.DateTime.fromISO(p.last_changed).toMillis(); const val=parseFloat(p.state); return {x:ts,y:isNaN(val)?null:parseFloat(val.toFixed(1))}; })
       .filter(p => p.y!==null && !isNaN(p.x));
-    datasets.push({ label, data: points, borderColor:'transparent', backgroundColor:'transparent', fill:false, tension:0.5, pointRadius:0, pointHitRadius:14, borderWidth:0, spanGaps:false });
+    datasets.push({ label, data:points, borderColor:'transparent', backgroundColor:'transparent', fill:false, tension:0.5, pointRadius:0, pointHitRadius:14, borderWidth:0, spanGaps:false });
   });
 
   if (chart) chart.destroy();
-  const dark = isDark();
-  const gridCol = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+  const dark    = isDark();
+  const gridCol = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
   const tickCol = dark ? '#6b7280' : '#9ca3af';
 
   chart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 600, easing: 'easeInOutQuart' },
-      interaction: { mode: 'index', intersect: false },
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration:600, easing:'easeInOutQuart' },
+      interaction: { mode:'index', intersect:false },
       plugins: {
-        legend: { display: false },
+        legend: { display:false },
         tooltip: {
           backgroundColor: dark?'rgba(15,15,19,0.96)':'rgba(255,255,255,0.96)',
           titleColor: dark?'#f1f1f5':'#1a1a2e',
-          bodyColor: dark?'#d1d5db':'#4b5563',
-          borderColor: dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
+          bodyColor:  dark?'#d1d5db':'#4b5563',
+          borderColor:dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
           borderWidth:1, padding:12, displayColors:true, cornerRadius:10,
           callbacks: {
             labelColor: ctx => { const c=tempToColor(ctx.parsed.y); return {borderColor:c,backgroundColor:c,borderRadius:3}; },
@@ -543,16 +561,8 @@ function renderChart(haData) {
         }
       },
       scales: {
-        x: {
-          type:'time',
-          time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM'}},
-          grid:{color:gridCol}, border:{display:false},
-          ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}}
-        },
-        y: {
-          grid:{color:gridCol}, border:{display:false},
-          ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'}
-        }
+        x: { type:'time', time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM'}}, grid:{color:gridCol}, border:{display:false}, ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}} },
+        y: { grid:{color:gridCol}, border:{display:false}, ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'} }
       }
     }
   });
