@@ -1,0 +1,27 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync to stable path
+        run: |
+          mkdir -p ~/apps/ha-temp-dashboard
+          rsync -a --delete             --exclude='.git'             --exclude='.github'             ./ ~/apps/ha-temp-dashboard/
+
+      - name: Deploy containers
+        working-directory: ~/apps/ha-temp-dashboard
+        run: docker compose up -d
+
+      - name: Health check
+        run: |
+          sleep 2
+          curl -sf http://localhost:8080 || exit 1
