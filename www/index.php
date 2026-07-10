@@ -241,9 +241,40 @@ let sensorsCache = null;
 
 document.getElementById('days').value = defaultDays;
 
-const COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#3b82f6'];
-
 function isDark() { return window.matchMedia('(prefers-color-scheme: dark)').matches; }
+
+// Temperature colour scale: cold (blue) -> comfortable (green) -> warm (amber) -> hot (red)
+const TEMP_SCALE = [
+  { t: 10, r: 96,  g: 165, b: 250 },  // blue-400
+  { t: 18, r: 52,  g: 211, b: 153 },  // emerald-400
+  { t: 22, r: 251, g: 191, b: 36  },  // amber-400
+  { t: 26, r: 251, g: 146, b: 60  },  // orange-400
+  { t: 32, r: 239, g: 68,  b: 68  },  // red-500
+];
+
+function tempToRgb(t) {
+  if (t <= TEMP_SCALE[0].t) return TEMP_SCALE[0];
+  if (t >= TEMP_SCALE[TEMP_SCALE.length - 1].t) return TEMP_SCALE[TEMP_SCALE.length - 1];
+  for (let i = 0; i < TEMP_SCALE.length - 1; i++) {
+    const a = TEMP_SCALE[i], b = TEMP_SCALE[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const f = (t - a.t) / (b.t - a.t);
+      return {
+        r: Math.round(a.r + f * (b.r - a.r)),
+        g: Math.round(a.g + f * (b.g - a.g)),
+        b: Math.round(a.b + f * (b.b - a.b)),
+      };
+    }
+  }
+}
+
+function tempToColor(t, alpha = 1) {
+  const { r, g, b } = tempToRgb(t);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Hero card colour based on current temp
+function heroColor(t) { return tempToColor(t); }
 
 async function savePrefs() {
   try {
@@ -266,10 +297,9 @@ function renderHero(sensorsData) {
   }
   const selected = sensorsData.filter(s => selectedSensors.has(s.entity_id));
   if (!selected.length) { hero.innerHTML = ''; return; }
-  hero.innerHTML = '<div class="hero">' + selected.map((s) => {
-    const colorIdx = Array.from(selectedSensors).indexOf(s.entity_id);
-    const col = COLORS[colorIdx % COLORS.length];
+  hero.innerHTML = '<div class="hero">' + selected.map(s => {
     const val = parseFloat(s.state);
+    const col = isNaN(val) ? 'var(--text2)' : heroColor(val);
     return `<div class="hero-card">
       <div class="label">${s.name}</div>
       <div class="temp" style="color:${col}">${isNaN(val) ? '--' : val.toFixed(1)}<span>\u00b0C</span></div>
@@ -297,10 +327,12 @@ async function populateDrawer() {
       const div = document.createElement('div');
       div.className = 'sensor-item';
       const checked = selectedSensors.has(s.entity_id) ? 'checked' : '';
+      const val = parseFloat(s.state);
+      const col = isNaN(val) ? 'var(--text2)' : heroColor(val);
       div.innerHTML = `
         <input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${checked}>
         <label for="cb_${s.entity_id}">${s.name}</label>
-        <span class="val">${parseFloat(s.state).toFixed(1)}${s.unit}</span>
+        <span class="val" style="color:${col}">${isNaN(val) ? '--' : val.toFixed(1)}\u00b0C</span>
       `;
       list.appendChild(div);
     });
@@ -331,7 +363,6 @@ function closeDrawer() {
 document.getElementById('toggleSensors').addEventListener('click', openDrawer);
 document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
 document.getElementById('drawerClose').addEventListener('click', closeDrawer);
-
 document.getElementById('updateBtn').addEventListener('click', () => { savePrefs(); updateChart(); });
 document.getElementById('days').addEventListener('change', () => { savePrefs(); updateChart(); });
 
@@ -354,15 +385,104 @@ async function updateChart() {
 
 function setStatus(html) { document.getElementById('status').innerHTML = html; }
 
+// Custom plugin: redraws each dataset line as a temperature-mapped gradient stroke
+const tempGradientPlugin = {
+  id: 'tempGradient',
+  beforeDatasetsDraw(chartInstance) {
+    const ctx = chartInstance.ctx;
+    chartInstance.data.datasets.forEach((ds, dsIdx) => {
+      const meta = chartInstance.getDatasetMeta(dsIdx);
+      if (!meta.visible || !meta.data.length) return;
+      const points = meta.data;
+      const rawData = ds.data;
+      if (points.length < 2) return;
+
+      ctx.save();
+      // Clip to chart area
+      const { left, right, top, bottom } = chartInstance.chartArea;
+      ctx.beginPath();
+      ctx.rect(left, top, right - left, bottom - top);
+      ctx.clip();
+
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      // Draw segment by segment with colour based on midpoint temperature
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        if (p0.skip || p1.skip) continue;
+
+        const t0 = rawData[i]?.y ?? 20;
+        const t1 = rawData[i + 1]?.y ?? 20;
+        const tMid = (t0 + t1) / 2;
+
+        // Linear gradient along the segment
+        const grad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+        grad.addColorStop(0, tempToColor(t0, 1));
+        grad.addColorStop(1, tempToColor(t1, 1));
+
+        ctx.beginPath();
+        // Use the bezier control points Chart.js computed
+        ctx.moveTo(p0.x, p0.y);
+        if (p0.cp2x !== undefined) {
+          ctx.bezierCurveTo(p0.cp2x, p0.cp2y, p1.cp1x, p1.cp1y, p1.x, p1.y);
+        } else {
+          ctx.lineTo(p1.x, p1.y);
+        }
+        ctx.strokeStyle = grad;
+        ctx.stroke();
+      }
+
+      // Soft glow: draw a wider, semi-transparent pass
+      ctx.globalAlpha = 0.18;
+      ctx.lineWidth = 10;
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i];
+        const p1 = points[i + 1];
+        if (p0.skip || p1.skip) continue;
+        const t0 = rawData[i]?.y ?? 20;
+        const t1 = rawData[i + 1]?.y ?? 20;
+        const grad = ctx.createLinearGradient(p0.x, p0.y, p1.x, p1.y);
+        grad.addColorStop(0, tempToColor(t0, 1));
+        grad.addColorStop(1, tempToColor(t1, 1));
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        if (p0.cp2x !== undefined) {
+          ctx.bezierCurveTo(p0.cp2x, p0.cp2y, p1.cp1x, p1.cp1y, p1.x, p1.y);
+        } else {
+          ctx.lineTo(p1.x, p1.y);
+        }
+        ctx.strokeStyle = grad;
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    });
+
+    // Suppress default line rendering
+    chartInstance.data.datasets.forEach((ds, dsIdx) => {
+      chartInstance.getDatasetMeta(dsIdx).dataset.options = {
+        ...chartInstance.getDatasetMeta(dsIdx).dataset.options,
+        borderColor: 'transparent',
+        backgroundColor: 'transparent',
+      };
+    });
+  }
+};
+
+Chart.register(tempGradientPlugin);
+
 function renderChart(haData) {
   const ctx = document.getElementById('chart').getContext('2d');
   const datasets = [];
   const ids = Array.from(selectedSensors);
+
   haData.forEach((sensorArr) => {
     if (!sensorArr || !sensorArr.length) return;
     const entityId = sensorArr[0].entity_id;
-    const colorIdx = ids.indexOf(entityId);
-    const color = COLORS[colorIdx % COLORS.length];
     const label = sensorArr[0].attributes?.friendly_name || entityId;
     const points = sensorArr
       .map(p => {
@@ -371,33 +491,50 @@ function renderChart(haData) {
         return { x: ts, y: isNaN(val) ? null : parseFloat(val.toFixed(1)) };
       })
       .filter(p => p.y !== null && !isNaN(p.x));
+
     datasets.push({
-      label, data: points,
-      borderColor: color,
-      backgroundColor: color + '15',
-      fill: true, tension: 0.4, pointRadius: 0, pointHitRadius: 12, borderWidth: 2.5,
+      label,
+      data: points,
+      borderColor: 'transparent',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.5,
+      pointRadius: 0,
+      pointHitRadius: 14,
+      borderWidth: 0,
+      spanGaps: false,
     });
   });
+
   if (chart) chart.destroy();
   const dark = isDark();
-  const gridCol = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const gridCol = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
   const tickCol = dark ? '#6b7280' : '#9ca3af';
+
   chart = new Chart(ctx, {
     type: 'line',
     data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeInOutQuart' },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: dark ? 'rgba(15,15,19,0.95)' : 'rgba(255,255,255,0.95)',
+          backgroundColor: dark ? 'rgba(15,15,19,0.96)' : 'rgba(255,255,255,0.96)',
           titleColor: dark ? '#f1f1f5' : '#1a1a2e',
           bodyColor: dark ? '#d1d5db' : '#4b5563',
           borderColor: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
           borderWidth: 1, padding: 12, displayColors: true, cornerRadius: 10,
-          callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C` }
+          callbacks: {
+            labelColor: (ctx) => {
+              const val = ctx.parsed.y;
+              const c = tempToColor(val);
+              return { borderColor: c, backgroundColor: c, borderRadius: 3 };
+            },
+            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}\u00b0C`
+          }
         }
       },
       scales: {
@@ -421,10 +558,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 (async () => {
   if (defaultSensors.length) {
     updateChart();
-    try {
-      const sensors = await loadSensors();
-      renderHero(sensors);
-    } catch(e) {}
+    try { const sensors = await loadSensors(); renderHero(sensors); } catch(e) {}
   } else {
     document.getElementById('heroArea').innerHTML =
       '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
