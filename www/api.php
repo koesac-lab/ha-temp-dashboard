@@ -50,11 +50,8 @@ function ts(DateTime $dt) {
 }
 
 // Fetch one history window and accumulate into &$raw / &$names.
-// Uses /api/history/period/{start} with the timestamp in the path unencoded,
-// exactly as HA documents it.
 function fetch_chunk($entity_ids, DateTime $start, DateTime $end, &$raw, &$names) {
     $ids  = array_map('trim', explode(',', $entity_ids));
-    // HA expects the start timestamp literally in the path, no encoding
     $data = ha_get(
         '/api/history/period/' . ts($start),
         ['filter_entity_id' => $entity_ids, 'end_time' => ts($end)],
@@ -78,6 +75,24 @@ function fetch_chunk($entity_ids, DateTime $start, DateTime $end, &$raw, &$names
     }
 }
 
+// ── Sensor type detection ────────────────────────────────────────────────────────
+function detect_sensor_type($state) {
+    $unit = $state['attributes']['unit_of_measurement'] ?? '';
+    $dc   = $state['attributes']['device_class'] ?? '';
+    if ($dc === 'temperature'
+        || stripos($unit, '\xc2\xb0') !== false
+        || $unit === '°C' || $unit === '°F'
+        || $unit === 'C'  || $unit === 'F')
+        return 'temperature';
+    if ($dc === 'carbon_dioxide' || $unit === 'ppm' || stripos($dc, 'co2') !== false)
+        return 'co2';
+    if ($dc === 'humidity' || $unit === '%')
+        return 'humidity';
+    if ($dc === 'aqi' || stripos($dc, 'air_quality') !== false || stripos($unit, 'aqi') !== false)
+        return 'aqi';
+    return null;
+}
+
 $action = $_GET['action'] ?? '';
 
 // ── Save prefs ───────────────────────────────────────────────────────────────
@@ -87,6 +102,8 @@ if ($action === 'save_prefs') {
     $new = $config;
     if (isset($body['default_sensors']) && is_array($body['default_sensors']))
         $new['default_sensors'] = array_values(array_filter($body['default_sensors'], 'is_string'));
+    if (isset($body['hidden_sensors']) && is_array($body['hidden_sensors']))
+        $new['hidden_sensors'] = array_values(array_filter($body['hidden_sensors'], 'is_string'));
     if (isset($body['default_days'])) {
         $d = intval($body['default_days']);
         if ($d >= 1) $new['default_days'] = $d;
@@ -99,22 +116,21 @@ if ($action === 'save_prefs') {
 if ($action === 'sensors') {
     $states  = ha_get('/api/states');
     $sensors = [];
+    $hidden  = $config['hidden_sensors'] ?? [];
     foreach ($states as $state) {
         if (strpos($state['entity_id'], 'sensor.') !== 0) continue;
-        $unit = $state['attributes']['unit_of_measurement'] ?? '';
-        $dc   = $state['attributes']['device_class'] ?? '';
-        if ($dc === 'temperature'
-            || stripos($unit, '\xc2\xb0') !== false
-            || stripos($unit, 'C') !== false
-            || stripos($unit, 'F') !== false) {
-            $sensors[] = [
-                'entity_id' => $state['entity_id'],
-                'name'      => $state['attributes']['friendly_name'] ?? $state['entity_id'],
-                'unit'      => $unit,
-                'state'     => $state['state'],
-            ];
-        }
+        $type = detect_sensor_type($state);
+        if (!$type) continue;
+        $sensors[] = [
+            'entity_id' => $state['entity_id'],
+            'name'      => $state['attributes']['friendly_name'] ?? $state['entity_id'],
+            'unit'      => $state['attributes']['unit_of_measurement'] ?? '',
+            'state'     => $state['state'],
+            'type'      => $type,
+            'hidden'    => in_array($state['entity_id'], $hidden),
+        ];
     }
+    usort($sensors, fn($a, $b) => strcmp($a['type'] . $a['name'], $b['type'] . $b['name']));
     echo json_encode($sensors);
     exit;
 }
@@ -166,7 +182,6 @@ if ($action === 'lts') {
         $chunk = $next;
     }
 
-    // Downsample: floor each reading to its UTC hour bucket, compute mean
     $result = [];
     foreach ($raw as $eid => $points) {
         if (empty($points)) continue;

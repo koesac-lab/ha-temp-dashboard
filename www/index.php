@@ -75,11 +75,14 @@ $longitude = $config['longitude'] ?? -0.1278;
   .drawer-header strong { font-size:1rem; flex:1; }
   .drawer-close { background:none; border:none; color:var(--text2); font-size:1.2rem; cursor:pointer; padding:4px 8px; line-height:1; }
   .sensor-list { overflow-y:auto; padding:0 20px 40px; flex:1; }
+  .sensor-group-label { font-size:0.72rem; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:0.06em; padding:12px 0 4px; }
   .sensor-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
   .sensor-item:last-child { border-bottom:none; }
   .sensor-item input[type="checkbox"] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; }
   .sensor-item label { flex:1; font-size:0.95rem; }
   .sensor-item .val { font-size:0.875rem; font-weight:600; flex-shrink:0; }
+  .hide-btn { background:none; border:1px solid var(--border); border-radius:6px; padding:2px 8px; font-size:0.75rem; color:var(--text2); cursor:pointer; flex-shrink:0; }
+  .hide-btn:hover { color:var(--text); border-color:var(--text2); }
   .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:5px; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @media (min-width:600px) {
@@ -120,7 +123,6 @@ $longitude = $config['longitude'] ?? -0.1278;
 const defaultSensors = <?= json_encode($config['default_sensors']) ?>;
 const defaultDays    = <?= intval($config['default_days']) ?>;
 const LOCATION       = { lat: <?= floatval($latitude) ?>, lon: <?= floatval($longitude) ?> };
-// Ranges above this use long-term statistics (hourly means) instead of raw history
 const LTS_THRESHOLD  = 30;
 
 let chart = null;
@@ -198,46 +200,89 @@ function tempToRgb(t){
 }
 function tempToColor(t,alpha=1){const{r,g,b}=tempToRgb(t);return`rgba(${r},${g},${b},${alpha})`;}
 
+// ── Sensor type config ─────────────────────────────────────────────────────────
+const TYPE_CONFIG = {
+  temperature: { axis: 'y',  unit: '\u00b0C', label: 'Temperature', color: null },
+  co2:         { axis: 'y2', unit: 'ppm',     label: 'CO\u2082',    color: 'rgba(251,146,60,{a})' },
+  humidity:    { axis: 'y3', unit: '%',        label: 'Humidity',    color: 'rgba(59,130,246,{a})' },
+  aqi:         { axis: 'y3', unit: 'AQI',      label: 'AQI',         color: 'rgba(168,85,247,{a})' },
+};
+function typeColor(type, val, alpha=1) {
+  if (type === 'temperature') return tempToColor(val, alpha);
+  const tmpl = TYPE_CONFIG[type]?.color || 'rgba(156,163,175,{a})';
+  return tmpl.replace('{a}', alpha);
+}
+
 // ── Prefs / Hero / Drawer ───────────────────────────────────────────────────────────
-async function savePrefs(){
+async function savePrefs(extra={}){
   try{
     await fetch('api.php?action=save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({default_sensors:Array.from(selectedSensors),default_days:parseInt(document.getElementById('days').value)})});
+      body:JSON.stringify({default_sensors:Array.from(selectedSensors),default_days:parseInt(document.getElementById('days').value),...extra})});
   }catch(e){console.warn('prefs:',e);}
 }
+
 function renderHero(sensorsData){
   const hero=document.getElementById('heroArea');
   if(!sensorsData||!sensorsData.length){hero.innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';return;}
-  const sel=sensorsData.filter(s=>selectedSensors.has(s.entity_id));
+  const sel=sensorsData.filter(s=>selectedSensors.has(s.entity_id)&&!s.hidden);
   if(!sel.length){hero.innerHTML='';return;}
   hero.innerHTML='<div class="hero">'+sel.map(s=>{
-    const v=parseFloat(s.state),col=isNaN(v)?'var(--text2)':tempToColor(v);
-    return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>\u00b0C</span></div></div>`;
+    const v=parseFloat(s.state);
+    const col=isNaN(v)?'var(--text2)':typeColor(s.type||'temperature',v);
+    const unit=s.unit||(TYPE_CONFIG[s.type||'temperature']?.unit??'\u00b0C');
+    return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
   }).join('')+'</div>';
 }
+
 async function loadSensors(){
   if(sensorsCache)return sensorsCache;
   const r=await fetch('api.php?action=sensors');const s=await r.json();
   if(!Array.isArray(s))throw new Error('bad');
   sensorsCache=s;return s;
 }
+
 async function populateDrawer(){
   const list=document.getElementById('sensorList');
-  list.innerHTML='<span class="spinner"></span> Loading…';
+  list.innerHTML='<span class="spinner"></span> Loading\u2026';
   try{
     const sensors=await loadSensors();renderHero(sensors);list.innerHTML='';
-    sensors.forEach(s=>{
-      const div=document.createElement('div');div.className='sensor-item';
-      const v=parseFloat(s.state),col=isNaN(v)?'var(--text2)':tempToColor(v);
-      div.innerHTML=`<input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${selectedSensors.has(s.entity_id)?'checked':''}><label for="cb_${s.entity_id}">${s.name}</label><span class="val" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}\u00b0C</span>`;
-      list.appendChild(div);
+    const TYPE_ORDER  = ['temperature','co2','humidity','aqi'];
+    const TYPE_LABELS = {temperature:'\ud83c\udf21\ufe0f Temperature',co2:'\ud83d\udca8 CO\u2082',humidity:'\ud83d\udca7 Humidity',aqi:'\ud83c\udf2b\ufe0f AQI'};
+    TYPE_ORDER.forEach(type=>{
+      const group=sensors.filter(s=>s.type===type);
+      if(!group.length)return;
+      const hdr=document.createElement('p');
+      hdr.className='sensor-group-label';
+      hdr.textContent=TYPE_LABELS[type]||type;
+      list.appendChild(hdr);
+      group.forEach(s=>{
+        const div=document.createElement('div');div.className='sensor-item';
+        const v=parseFloat(s.state);
+        const col=isNaN(v)?'var(--text2)':typeColor(s.type,v);
+        const unit=s.unit||(TYPE_CONFIG[s.type]?.unit??'');
+        div.innerHTML=`
+          <input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${selectedSensors.has(s.entity_id)?'checked':''}>
+          <label for="cb_${s.entity_id}">${s.name}</label>
+          <button class="hide-btn" data-id="${s.entity_id}">${s.hidden?'Show':'Hide'}</button>
+          <span class="val" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}${unit}</span>`;
+        list.appendChild(div);
+      });
     });
-    list.querySelectorAll('input').forEach(cb=>cb.addEventListener('change',()=>{
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
       cb.checked?selectedSensors.add(cb.value):selectedSensors.delete(cb.value);
       renderHero(sensorsCache);savePrefs();updateChart();
     }));
+    list.querySelectorAll('.hide-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+      const id=btn.dataset.id;
+      const s=sensorsCache.find(x=>x.entity_id===id);if(!s)return;
+      s.hidden=!s.hidden;
+      const hidden=sensorsCache.filter(x=>x.hidden).map(x=>x.entity_id);
+      await savePrefs({hidden_sensors:hidden});
+      populateDrawer();updateChart();
+    }));
   }catch(e){list.innerHTML='<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>';}
 }
+
 function openDrawer(){document.getElementById('sensorDrawer').classList.add('open');document.getElementById('drawerBackdrop').classList.add('open');populateDrawer();}
 function closeDrawer(){document.getElementById('sensorDrawer').classList.remove('open');document.getElementById('drawerBackdrop').classList.remove('open');}
 document.getElementById('toggleSensors').addEventListener('click',openDrawer);
@@ -249,7 +294,14 @@ document.getElementById('days').addEventListener('change',()=>{savePrefs();updat
 // ── Chart update ───────────────────────────────────────────────────────────────
 async function updateChart(){
   const days=parseInt(document.getElementById('days').value);
-  const ids=Array.from(selectedSensors).join(',');
+  // Collect selected sensors that are not hidden
+  const activeSensors = sensorsCache
+    ? Array.from(selectedSensors).filter(id=>{
+        const s=sensorsCache.find(x=>x.entity_id===id);
+        return s && !s.hidden;
+      })
+    : Array.from(selectedSensors);
+  const ids=activeSensors.join(',');
   if(!ids){setStatus('Select at least one sensor');return;}
 
   const useLTS = days > LTS_THRESHOLD;
@@ -257,13 +309,13 @@ async function updateChart(){
     ? `api.php?action=lts&days=${days}&entity_ids=${encodeURIComponent(ids)}`
     : `api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`;
 
-  setStatus('<span class="spinner"></span> Loading…');
+  setStatus('<span class="spinner"></span> Loading\u2026');
   try{
     const res=await fetch(endpoint);
     const data=await res.json();
     if(!Array.isArray(data))throw new Error(JSON.stringify(data));
     const label = days >= 365 ? '1 year' : days >= 90 ? '3 months' : `${days} day${days>1?'s':''}`;
-    const mode  = useLTS ? ' · hourly averages' : '';
+    const mode  = useLTS ? ' \u00b7 hourly averages' : '';
     renderChart(data);
     setStatus(`${label}${mode} \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
   }catch(e){setStatus('Error: '+e.message);console.error(e);}
@@ -316,6 +368,7 @@ const tempGradientPlugin={
   beforeDatasetsDraw(ci){
     const ctx=ci.ctx;
     ci.data.datasets.forEach((ds,di)=>{
+      if(ds._stype && ds._stype !== 'temperature') return;
       const meta=ci.getDatasetMeta(di);
       if(!meta.visible||!meta.data.length)return;
       const pts=meta.data,raw=ds.data;
@@ -340,7 +393,8 @@ const tempGradientPlugin={
       pass(12,0.15);pass(3,1.0);
       ctx.globalAlpha=1;ctx.restore();
     });
-    ci.data.datasets.forEach((_,di)=>{
+    ci.data.datasets.forEach((ds,di)=>{
+      if(ds._stype && ds._stype !== 'temperature') return;
       const o=ci.getDatasetMeta(di).dataset.options;
       if(o){o.borderColor='transparent';o.backgroundColor='transparent';}
     });
@@ -355,15 +409,40 @@ function renderChart(haData){
   const ctx=document.getElementById('chart').getContext('2d');
   const datasets=[];
   let xMin=Infinity,xMax=-Infinity;
+  let hasY2=false,hasY3=false;
+
   haData.forEach(arr=>{
     if(!arr||!arr.length)return;
-    const label=arr[0].attributes?.friendly_name||arr[0].entity_id;
+    const eid=arr[0].entity_id||'';
+    const meta=sensorsCache?sensorsCache.find(s=>s.entity_id===eid):null;
+    const stype=(meta?.type)||'temperature';
+    if(meta?.hidden)return;
+
+    const label=arr[0].attributes?.friendly_name||eid;
     const pts=arr
-      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(1))};} )
+      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};} )
       .filter(p=>p.y!==null&&!isNaN(p.x));
-    if(pts.length){xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);}
-    datasets.push({label,data:pts,borderColor:'transparent',backgroundColor:'transparent',fill:false,tension:0.4,pointRadius:0,pointHitRadius:14,borderWidth:0,spanGaps:false});
+    if(!pts.length)return;
+    xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);
+
+    const axisCfg=TYPE_CONFIG[stype]||TYPE_CONFIG.temperature;
+    if(axisCfg.axis==='y2')hasY2=true;
+    if(axisCfg.axis==='y3')hasY3=true;
+
+    const sampleVal=pts.find(p=>p.y!==null)?.y??20;
+    const borderCol=stype==='temperature'?'transparent':typeColor(stype,sampleVal,1);
+    const bgCol    =stype==='temperature'?'transparent':typeColor(stype,sampleVal,0.12);
+
+    datasets.push({
+      label,data:pts,
+      yAxisID:axisCfg.axis,
+      borderColor:borderCol,backgroundColor:bgCol,
+      fill:false,tension:0.4,pointRadius:0,pointHitRadius:14,
+      borderWidth:stype==='temperature'?0:2,spanGaps:false,
+      _stype:stype,
+    });
   });
+
   if(xMin<Infinity){
     solarBands=buildSolarBands(xMin-86400000,xMax+86400000,LOCATION.lat,LOCATION.lon);
   }
@@ -371,6 +450,7 @@ function renderChart(haData){
   const dark=isDark();
   const gridCol=dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
   const tickCol=dark?'#6b7280':'#9ca3af';
+
   chart=new Chart(ctx,{
     type:'line',data:{datasets},
     options:{
@@ -378,21 +458,54 @@ function renderChart(haData){
       animation:{duration:600,easing:'easeInOutQuart'},
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:false},
+        legend:{
+          display:true,
+          labels:{color:tickCol,font:{size:11},boxWidth:12,padding:12,
+            filter:(item,data)=>{
+              const ds=data.datasets[item.datasetIndex];
+              return ds && ds._stype !== 'temperature';
+            }
+          }
+        },
         tooltip:{
           backgroundColor:dark?'rgba(15,15,19,0.96)':'rgba(255,255,255,0.96)',
           titleColor:dark?'#f1f1f5':'#1a1a2e',bodyColor:dark?'#d1d5db':'#4b5563',
           borderColor:dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
           borderWidth:1,padding:12,displayColors:true,cornerRadius:10,
           callbacks:{
-            labelColor:c=>{const col=tempToColor(c.parsed.y);return{borderColor:col,backgroundColor:col,borderRadius:3};},
-            label:c=>` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}\u00b0C`
+            labelColor:c=>{
+              const ds=c.chart.data.datasets[c.datasetIndex];
+              const stype=ds._stype||'temperature';
+              const col=typeColor(stype,c.parsed.y);
+              return{borderColor:col,backgroundColor:col,borderRadius:3};
+            },
+            label:c=>{
+              const ds=c.chart.data.datasets[c.datasetIndex];
+              const stype=ds._stype||'temperature';
+              const unit=TYPE_CONFIG[stype]?.unit||'\u00b0C';
+              return` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}${unit}`;
+            }
           }
         }
       },
       scales:{
         x:{type:'time',time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM',month:'MMM yyyy'}},grid:{color:gridCol},border:{display:false},ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}}},
-        y:{grid:{color:gridCol},border:{display:false},ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'}}
+        y:{position:'left',grid:{color:gridCol},border:{display:false},
+          title:{display:true,text:'\u00b0C',color:tickCol,font:{size:11}},
+          ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'}},
+        ...(hasY2?{y2:{
+          position:'right',grid:{drawOnChartArea:false},border:{display:false},
+          title:{display:true,text:'CO\u2082 (ppm)',color:'rgba(251,146,60,0.9)',font:{size:11}},
+          ticks:{color:'rgba(251,146,60,0.9)',font:{size:11}},
+          min:400,
+        }}:{}),
+        ...(hasY3?{y3:{
+          position:'right',grid:{drawOnChartArea:false},border:{display:false},
+          title:{display:true,text:'% / AQI',color:'rgba(59,130,246,0.9)',font:{size:11}},
+          ticks:{color:'rgba(59,130,246,0.9)',font:{size:11}},
+          min:0,
+          offset:!!hasY2,
+        }}:{}),
       }
     }
   });

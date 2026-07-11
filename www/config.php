@@ -7,4 +7,5 @@ return [
     'default_days'    => 7,
     'latitude'        => 51.5074,
     'longitude'       => -0.1278,
+    'hidden_sensors'  => [],
 ];
