@@ -294,7 +294,6 @@ document.getElementById('days').addEventListener('change',()=>{savePrefs();updat
 // ── Chart update ───────────────────────────────────────────────────────────────
 async function updateChart(){
   const days=parseInt(document.getElementById('days').value);
-  // Collect selected sensors that are not hidden
   const activeSensors = sensorsCache
     ? Array.from(selectedSensors).filter(id=>{
         const s=sensorsCache.find(x=>x.entity_id===id);
@@ -362,39 +361,64 @@ const dayNightPlugin={
   }
 };
 
-// ── Temperature gradient line plugin ─────────────────────────────────────────────────
-const tempGradientPlugin={
-  id:'tempGradient',
+// ── Smooth glow line plugin (all sensor types) ────────────────────────────────────
+// Draws every dataset using manual bezier curves with a wide soft glow pass
+// followed by a crisp line pass — matching the temperature treatment exactly,
+// but using a solid per-type colour instead of the heat gradient.
+const smoothGlowPlugin={
+  id:'smoothGlow',
   beforeDatasetsDraw(ci){
     const ctx=ci.ctx;
     ci.data.datasets.forEach((ds,di)=>{
-      if(ds._stype && ds._stype !== 'temperature') return;
       const meta=ci.getDatasetMeta(di);
       if(!meta.visible||!meta.data.length)return;
       const pts=meta.data,raw=ds.data;
       if(pts.length<2)return;
+      const stype=ds._stype||'temperature';
+
       ctx.save();
       const{left,right,top,bottom}=ci.chartArea;
       ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
-      function pass(lw,alpha){
-        ctx.globalAlpha=alpha;ctx.lineWidth=lw;ctx.lineJoin='round';ctx.lineCap='round';
+
+      // Resolve the solid colour for this dataset at full alpha
+      const sampleVal=raw.find(p=>p&&p.y!=null)?.y??20;
+      const solidColor=typeColor(stype,sampleVal,1);
+      const glowColor =typeColor(stype,sampleVal,0.15);
+
+      function drawPass(lw,color){
+        ctx.lineWidth=lw;ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle=color;
         for(let i=0;i<pts.length-1;i++){
           const p0=pts[i],p1=pts[i+1];
           if(p0.skip||p1.skip)continue;
-          const t0=raw[i]?.y??20,t1=raw[i+1]?.y??20;
-          const g=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
-          g.addColorStop(0,tempToColor(t0));g.addColorStop(1,tempToColor(t1));
+          // For temperature: per-segment gradient; for others: solid colour
+          if(stype==='temperature'){
+            const t0=raw[i]?.y??20,t1=raw[i+1]?.y??20;
+            const g=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
+            const alpha=lw>4?0.15:1.0;
+            g.addColorStop(0,tempToColor(t0,alpha));g.addColorStop(1,tempToColor(t1,alpha));
+            ctx.strokeStyle=g;
+          }
           ctx.beginPath();ctx.moveTo(p0.x,p0.y);
           if(p0.cp2x!==undefined)ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
           else ctx.lineTo(p1.x,p1.y);
-          ctx.strokeStyle=g;ctx.stroke();
+          ctx.stroke();
         }
       }
-      pass(12,0.15);pass(3,1.0);
+
+      // Glow pass (wide, soft) then crisp line pass
+      if(stype==='temperature'){
+        drawPass(12,glowColor);
+        drawPass(3,solidColor);
+      } else {
+        drawPass(12,glowColor);
+        drawPass(2,solidColor);
+      }
+
       ctx.globalAlpha=1;ctx.restore();
     });
-    ci.data.datasets.forEach((ds,di)=>{
-      if(ds._stype && ds._stype !== 'temperature') return;
+
+    // Hide Chart.js's own default rendering for all datasets
+    ci.data.datasets.forEach((_,di)=>{
       const o=ci.getDatasetMeta(di).dataset.options;
       if(o){o.borderColor='transparent';o.backgroundColor='transparent';}
     });
@@ -402,7 +426,7 @@ const tempGradientPlugin={
 };
 
 Chart.register(dayNightPlugin);
-Chart.register(tempGradientPlugin);
+Chart.register(smoothGlowPlugin);
 
 // ── Render chart ───────────────────────────────────────────────────────────────
 function renderChart(haData){
@@ -420,7 +444,7 @@ function renderChart(haData){
 
     const label=arr[0].attributes?.friendly_name||eid;
     const pts=arr
-      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};} )
+      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};})
       .filter(p=>p.y!==null&&!isNaN(p.x));
     if(!pts.length)return;
     xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);
@@ -429,16 +453,12 @@ function renderChart(haData){
     if(axisCfg.axis==='y2')hasY2=true;
     if(axisCfg.axis==='y3')hasY3=true;
 
-    const sampleVal=pts.find(p=>p.y!==null)?.y??20;
-    const borderCol=stype==='temperature'?'transparent':typeColor(stype,sampleVal,1);
-    const bgCol    =stype==='temperature'?'transparent':typeColor(stype,sampleVal,0.12);
-
     datasets.push({
       label,data:pts,
       yAxisID:axisCfg.axis,
-      borderColor:borderCol,backgroundColor:bgCol,
+      borderColor:'transparent',backgroundColor:'transparent',
       fill:false,tension:0.4,pointRadius:0,pointHitRadius:14,
-      borderWidth:stype==='temperature'?0:2,spanGaps:false,
+      borderWidth:0,spanGaps:false,
       _stype:stype,
     });
   });
