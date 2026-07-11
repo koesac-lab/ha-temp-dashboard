@@ -21,12 +21,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $days = intval($_POST['default_days']);
         if ($days >= 1 && $days <= 30) $new['default_days'] = $days;
     }
-    if (isset($_POST['default_sensors'])) {
-        $raw = trim($_POST['default_sensors']);
-        $new['default_sensors'] = $raw === ''
-            ? []
-            : array_values(array_filter(array_map('trim', explode(',', $raw))));
-    }
     if (isset($_POST['latitude']) && $_POST['latitude'] !== '') {
         $lat = floatval($_POST['latitude']);
         if ($lat >= -90 && $lat <= 90) $new['latitude'] = $lat;
@@ -48,7 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $tokenSet = !empty($config['ha_token']) && $config['ha_token'] !== 'YOUR_LONG_LIVED_ACCESS_TOKEN_HERE';
-$sensorsStr = implode(', ', $config['default_sensors'] ?? []);
 $lat = $config['latitude'] ?? 51.5074;
 $lon = $config['longitude'] ?? -0.1278;
 ?>
@@ -94,8 +87,8 @@ $lon = $config['longitude'] ?? -0.1278;
   .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
   .topbar a { color: var(--accent); text-decoration: none; font-size: 0.95rem; }
   h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
-  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; border: 1px solid var(--border); }
-  .card h2 { font-size: 0.95rem; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+  .card, .settings-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; border: 1px solid var(--border); }
+  .card h2, .settings-card h2 { font-size: 0.95rem; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
   .field { margin-bottom: 18px; }
   .field:last-child { margin-bottom: 0; }
   .field-row { display: flex; gap: 12px; }
@@ -115,7 +108,7 @@ $lon = $config['longitude'] ?? -0.1278;
     transition: border-color 0.15s;
   }
   input:focus { border-color: var(--accent); }
-  .hint { font-size: 0.8rem; color: var(--text2); margin-top: 5px; }
+  .hint { font-size: 0.8rem; color: var(--text2); margin-top: 5px; margin-bottom: 0; }
   .token-status { display: inline-flex; align-items: center; gap: 5px; font-size: 0.82rem; margin-top: 5px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .dot.set { background: var(--green); }
@@ -140,6 +133,19 @@ $lon = $config['longitude'] ?? -0.1278;
     .alert.success { background: #052e16; color: #6ee7b7; }
     .alert.error   { background: #3b0f0f; color: #fca5a5; }
   }
+  /* Sensor visibility */
+  .sensor-group { margin-bottom: 1.5rem; }
+  .sensor-group h3 { font-size: 0.8rem; text-transform: uppercase; opacity: 0.5; margin-bottom: 0.5rem; }
+  .sensor-toggle { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; cursor: pointer; font-size: 0.95rem; }
+  .sensor-toggle input { accent-color: var(--accent); }
+  .hidden-sensor-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+  .btn-restore { font-size: 0.8rem; padding: 0.2rem 0.6rem; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; }
+  /* Save status indicator */
+  .save-status { font-size: 0.8rem; margin-left: 1rem; }
+  .save-status.saving { color: var(--text2); }
+  .save-status.saved { color: #10b981; }
+  .save-status.error { color: #ef4444; }
+  .loading { font-size: 0.9rem; color: var(--text2); }
 </style>
 </head>
 <body>
@@ -202,17 +208,131 @@ $lon = $config['longitude'] ?? -0.1278;
       <input type="number" id="default_days" name="default_days"
              value="<?= intval($config['default_days']) ?>" min="1" max="30">
     </div>
-    <div class="field">
-      <label for="default_sensors">Default sensors</label>
-      <input type="text" id="default_sensors" name="default_sensors"
-             value="<?= htmlspecialchars($sensorsStr) ?>"
-             placeholder="sensor.bedroom_temp, sensor.lounge_temp">
-      <p class="hint">Comma-separated entity IDs.</p>
-    </div>
   </div>
 
   <button type="submit" class="btn">Save Settings</button>
 </form>
+
+<!-- SENSOR VISIBILITY SECTION -->
+<div id="sensors" class="settings-card" style="margin-top:24px; scroll-margin-top: 80px;">
+  <h2>Sensor Visibility <span id="sensor-save-status" class="save-status"></span></h2>
+  <p class="hint" style="margin-bottom:14px;">Uncheck a sensor to hide it from the drawer and chart. Changes save automatically.</p>
+  <div id="visible-sensors-list">
+    <p class="loading">Loading sensors…</p>
+  </div>
+</div>
+
+<div id="hidden-sensors-card" class="settings-card" style="display:none;">
+  <h2>Hidden Sensors</h2>
+  <p class="hint" style="margin-bottom:14px;">Restore a sensor to make it visible again in the drawer.</p>
+  <div id="hidden-sensors-list"></div>
+</div>
+
+<script>
+(function () {
+  if (window.location.hash === '#sensors') {
+    setTimeout(() => {
+      document.getElementById('sensors')?.scrollIntoView({ behavior: 'smooth' });
+    }, 200);
+  }
+
+  let allSensors = [];
+  let prefs = {};
+
+  Promise.all([
+    fetch('api.php?action=get_prefs').then(r => r.json()),
+    fetch('api.php?action=sensors').then(r => r.json())
+  ]).then(([prefsData, sensorsData]) => {
+    prefs = prefsData || {};
+    allSensors = Array.isArray(sensorsData) ? sensorsData : [];
+    renderSensorVisibility();
+  }).catch(() => {
+    document.getElementById('visible-sensors-list').innerHTML = '<p class="hint">Could not load sensors.</p>';
+  });
+
+  function renderSensorVisibility() {
+    const hiddenIds = prefs.hidden_sensors || [];
+    const visibleSensors = allSensors.filter(s => !hiddenIds.includes(s.entity_id));
+    const hiddenSensors  = allSensors.filter(s =>  hiddenIds.includes(s.entity_id));
+
+    // Group visible sensors by domain
+    const groups = {};
+    visibleSensors.forEach(s => {
+      const type = s.entity_id.split('.')[0];
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(s);
+    });
+
+    const visibleList = document.getElementById('visible-sensors-list');
+    visibleList.innerHTML = Object.entries(groups).map(([type, sensors]) => `
+      <div class="sensor-group">
+        <h3>${type}</h3>
+        ${sensors.map(s => `
+          <label class="sensor-toggle">
+            <input type="checkbox" checked
+              data-sensor="${s.entity_id}"
+              onchange="toggleSensorVisibility('${s.entity_id}', this.checked)">
+            ${s.name || s.entity_id}
+          </label>
+        `).join('')}
+      </div>
+    `).join('') || '<p class="hint">No visible sensors.</p>';
+
+    const hiddenCard = document.getElementById('hidden-sensors-card');
+    const hiddenList = document.getElementById('hidden-sensors-list');
+
+    if (hiddenSensors.length > 0) {
+      hiddenCard.style.display = 'block';
+      hiddenList.innerHTML = hiddenSensors.map(s => `
+        <div class="hidden-sensor-row">
+          <span>${s.name || s.entity_id}</span>
+          <button class="btn-restore" onclick="restoreSensor('${s.entity_id}')">Restore</button>
+        </div>
+      `).join('');
+    } else {
+      hiddenCard.style.display = 'none';
+    }
+  }
+
+  window.toggleSensorVisibility = function (entityId, visible) {
+    if (!visible) {
+      prefs.hidden_sensors = [...(prefs.hidden_sensors || []), entityId];
+    } else {
+      prefs.hidden_sensors = (prefs.hidden_sensors || []).filter(id => id !== entityId);
+    }
+    savePrefsAjax();
+    renderSensorVisibility();
+  };
+
+  window.restoreSensor = function (entityId) {
+    prefs.hidden_sensors = (prefs.hidden_sensors || []).filter(id => id !== entityId);
+    savePrefsAjax();
+    renderSensorVisibility();
+  };
+
+  function savePrefsAjax() {
+    const status = document.getElementById('sensor-save-status');
+    status.textContent = 'Saving…';
+    status.className = 'save-status saving';
+
+    fetch('api.php?action=save_prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs)
+    })
+    .then(r => r.json())
+    .then(() => {
+      status.textContent = 'Saved ✓';
+      status.className = 'save-status saved';
+      setTimeout(() => { status.textContent = ''; }, 2000);
+    })
+    .catch(() => {
+      status.textContent = 'Error saving';
+      status.className = 'save-status error';
+    });
+  }
+})();
+</script>
 
 </body>
 </html>

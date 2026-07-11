@@ -83,6 +83,10 @@ $longitude = $config['longitude'] ?? -0.1278;
   .sensor-item .val { font-size:0.875rem; font-weight:600; flex-shrink:0; }
   .hide-btn { background:none; border:1px solid var(--border); border-radius:6px; padding:2px 8px; font-size:0.75rem; color:var(--text2); cursor:pointer; flex-shrink:0; }
   .hide-btn:hover { color:var(--text); border-color:var(--text2); }
+  .drawer-footer { padding:0.75rem 0 0; border-top:1px solid var(--border); margin-top:0.5rem; font-size:0.85rem; }
+  .drawer-footer a { color:var(--accent); text-decoration:none; }
+  .drawer-empty { font-size:0.9rem; color:var(--text2); padding:12px 0; }
+  .drawer-empty a { color:var(--accent); }
   .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:5px; }
   @keyframes spin { to { transform:rotate(360deg); } }
   @media (min-width:600px) {
@@ -245,11 +249,22 @@ async function populateDrawer(){
   const list=document.getElementById('sensorList');
   list.innerHTML='<span class="spinner"></span> Loading\u2026';
   try{
-    const sensors=await loadSensors();renderHero(sensors);list.innerHTML='';
+    const sensors=await loadSensors();renderHero(sensors);
+
+    // Filter out hidden sensors
+    const visibleSensors = sensors.filter(s => !s.hidden);
+
+    if (!visibleSensors.length) {
+      list.innerHTML = `<p class="drawer-empty">All sensors are hidden.<br><a href="settings.php#sensors">Manage hidden sensors →</a></p>
+        <div class="drawer-footer"><a href="settings.php#sensors">Manage hidden sensors →</a></div>`;
+      return;
+    }
+
+    list.innerHTML='';
     const TYPE_ORDER  = ['temperature','co2','humidity','aqi'];
     const TYPE_LABELS = {temperature:'\ud83c\udf21\ufe0f Temperature',co2:'\ud83d\udca8 CO\u2082',humidity:'\ud83d\udca7 Humidity',aqi:'\ud83c\udf2b\ufe0f AQI'};
     TYPE_ORDER.forEach(type=>{
-      const group=sensors.filter(s=>s.type===type);
+      const group=visibleSensors.filter(s=>s.type===type);
       if(!group.length)return;
       const hdr=document.createElement('p');
       hdr.className='sensor-group-label';
@@ -263,22 +278,35 @@ async function populateDrawer(){
         div.innerHTML=`
           <input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${selectedSensors.has(s.entity_id)?'checked':''}>
           <label for="cb_${s.entity_id}">${s.name}</label>
-          <button class="hide-btn" data-id="${s.entity_id}">${s.hidden?'Show':'Hide'}</button>
+          <button class="hide-btn" data-id="${s.entity_id}">Hide</button>
           <span class="val" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}${unit}</span>`;
         list.appendChild(div);
       });
     });
+
+    // "Manage hidden sensors" footer link
+    const footer = document.createElement('div');
+    footer.className = 'drawer-footer';
+    footer.innerHTML = '<a href="settings.php#sensors">Manage hidden sensors →</a>';
+    list.appendChild(footer);
+
     list.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
       cb.checked?selectedSensors.add(cb.value):selectedSensors.delete(cb.value);
       renderHero(sensorsCache);savePrefs();updateChart();
     }));
-    list.querySelectorAll('.hide-btn').forEach(btn=>btn.addEventListener('click',async()=>{
-      const id=btn.dataset.id;
-      const s=sensorsCache.find(x=>x.entity_id===id);if(!s)return;
-      s.hidden=!s.hidden;
-      const hidden=sensorsCache.filter(x=>x.hidden).map(x=>x.entity_id);
-      await savePrefs({hidden_sensors:hidden});
-      populateDrawer();updateChart();
+
+    // Hide button: marks hidden, removes from selected, persists, re-renders
+    list.querySelectorAll('.hide-btn').forEach(btn=>btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const s = sensorsCache.find(x => x.entity_id === id);
+      if (!s) return;
+      s.hidden = true;
+      selectedSensors.delete(id);
+      const hidden = sensorsCache.filter(x => x.hidden).map(x => x.entity_id);
+      await savePrefs({ hidden_sensors: hidden });
+      renderHero(sensorsCache);
+      updateChart();
+      populateDrawer();
     }));
   }catch(e){list.innerHTML='<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>';}
 }
@@ -362,9 +390,6 @@ const dayNightPlugin={
 };
 
 // ── Smooth glow line plugin (all sensor types) ────────────────────────────────────
-// Draws every dataset using manual bezier curves with a wide soft glow pass
-// followed by a crisp line pass — matching the temperature treatment exactly,
-// but using a solid per-type colour instead of the heat gradient.
 const smoothGlowPlugin={
   id:'smoothGlow',
   beforeDatasetsDraw(ci){
@@ -380,7 +405,6 @@ const smoothGlowPlugin={
       const{left,right,top,bottom}=ci.chartArea;
       ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
 
-      // Resolve the solid colour for this dataset at full alpha
       const sampleVal=raw.find(p=>p&&p.y!=null)?.y??20;
       const solidColor=typeColor(stype,sampleVal,1);
       const glowColor =typeColor(stype,sampleVal,0.15);
@@ -390,7 +414,6 @@ const smoothGlowPlugin={
         for(let i=0;i<pts.length-1;i++){
           const p0=pts[i],p1=pts[i+1];
           if(p0.skip||p1.skip)continue;
-          // For temperature: per-segment gradient; for others: solid colour
           if(stype==='temperature'){
             const t0=raw[i]?.y??20,t1=raw[i+1]?.y??20;
             const g=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
@@ -405,7 +428,6 @@ const smoothGlowPlugin={
         }
       }
 
-      // Glow pass (wide, soft) then crisp line pass
       if(stype==='temperature'){
         drawPass(12,glowColor);
         drawPass(3,solidColor);
@@ -417,7 +439,6 @@ const smoothGlowPlugin={
       ctx.globalAlpha=1;ctx.restore();
     });
 
-    // Hide Chart.js's own default rendering for all datasets
     ci.data.datasets.forEach((_,di)=>{
       const o=ci.getDatasetMeta(di).dataset.options;
       if(o){o.borderColor='transparent';o.backgroundColor='transparent';}
@@ -444,7 +465,7 @@ function renderChart(haData){
 
     const label=arr[0].attributes?.friendly_name||eid;
     const pts=arr
-      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};})
+      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};}
       .filter(p=>p.y!==null&&!isNaN(p.x));
     if(!pts.length)return;
     xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);
