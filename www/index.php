@@ -465,7 +465,7 @@ function renderChart(haData){
 
     const label=arr[0].attributes?.friendly_name||eid;
     const pts=arr
-      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};}
+      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};})
       .filter(p=>p.y!==null&&!isNaN(p.x));
     if(!pts.length)return;
     xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);
