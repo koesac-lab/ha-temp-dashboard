@@ -251,12 +251,11 @@ async function populateDrawer(){
   try{
     const sensors=await loadSensors();renderHero(sensors);
 
-    // Filter out hidden sensors
     const visibleSensors = sensors.filter(s => !s.hidden);
 
     if (!visibleSensors.length) {
-      list.innerHTML = `<p class="drawer-empty">All sensors are hidden.<br><a href="settings.php#sensors">Manage hidden sensors →</a></p>
-        <div class="drawer-footer"><a href="settings.php#sensors">Manage hidden sensors →</a></div>`;
+      list.innerHTML = `<p class="drawer-empty">All sensors are hidden.<br><a href="settings.php#sensors">Manage hidden sensors \u2192</a></p>
+        <div class="drawer-footer"><a href="settings.php#sensors">Manage hidden sensors \u2192</a></div>`;
       return;
     }
 
@@ -284,10 +283,9 @@ async function populateDrawer(){
       });
     });
 
-    // "Manage hidden sensors" footer link
     const footer = document.createElement('div');
     footer.className = 'drawer-footer';
-    footer.innerHTML = '<a href="settings.php#sensors">Manage hidden sensors →</a>';
+    footer.innerHTML = '<a href="settings.php#sensors">Manage hidden sensors \u2192</a>';
     list.appendChild(footer);
 
     list.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
@@ -295,7 +293,6 @@ async function populateDrawer(){
       renderHero(sensorsCache);savePrefs();updateChart();
     }));
 
-    // Hide button: marks hidden, removes from selected, persists, re-renders
     list.querySelectorAll('.hide-btn').forEach(btn=>btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
       const s = sensorsCache.find(x => x.entity_id === id);
@@ -338,14 +335,32 @@ async function updateChart(){
 
   setStatus('<span class="spinner"></span> Loading\u2026');
   try{
-    const res=await fetch(endpoint);
-    const data=await res.json();
-    if(!Array.isArray(data))throw new Error(JSON.stringify(data));
+    const res = await fetch(endpoint);
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch(parseErr) {
+      console.error('JSON parse failed. HTTP', res.status, '\nResponse length:', text.length, '\nFirst 500 chars:', text.slice(0, 500));
+      setStatus(`Error: Response malformed (HTTP ${res.status}, ${text.length} bytes) — check console`);
+      return;
+    }
+    if (!res.ok || !Array.isArray(data)) {
+      const msg = data?.error || data?.message || JSON.stringify(data).slice(0, 120);
+      const detail = data?.preview ? ` · preview: ${data.preview.slice(0,80)}` : '';
+      const size   = data?.length  ? ` · ${data.length} bytes` : '';
+      console.error('API error:', data);
+      setStatus(`Error (HTTP ${res.status}): ${msg}${size}${detail}`);
+      return;
+    }
     const label = days >= 365 ? '1 year' : days >= 90 ? '3 months' : `${days} day${days>1?'s':''}`;
     const mode  = useLTS ? ' \u00b7 hourly averages' : '';
     renderChart(data);
     setStatus(`${label}${mode} \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
-  }catch(e){setStatus('Error: '+e.message);console.error(e);}
+  }catch(e){
+    console.error('updateChart exception:', e);
+    setStatus('Error: ' + e.message);
+  }
 }
 function setStatus(html){document.getElementById('status').innerHTML=html;}
 

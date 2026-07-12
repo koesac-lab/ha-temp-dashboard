@@ -1,6 +1,11 @@
 <?php
 header('Content-Type: application/json');
 
+// Ensure enough resources for large history fetches
+@ini_set('memory_limit', '256M');
+@ini_set('max_execution_time', '120');
+@set_time_limit(120);
+
 if (file_exists(__DIR__ . '/config.local.php')) {
     $config = require __DIR__ . '/config.local.php';
 } else {
@@ -22,20 +27,27 @@ function ha_get($endpoint, $params = [], $flags = []) {
         'Content-Type: application/json',
     ]);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
     $response  = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    if ($response === false) {
-        http_response_code(500); echo json_encode(['error' => curl_error($ch)]); exit;
-    }
+    $curl_err  = curl_error($ch);
     curl_close($ch);
+    if ($response === false) {
+        http_response_code(500);
+        echo json_encode(['error' => 'cURL failed: ' . $curl_err]); exit;
+    }
     if ($http_code >= 400) {
         http_response_code($http_code);
-        echo json_encode(['error' => 'HA returned HTTP ' . $http_code, 'response' => $response]); exit;
+        echo json_encode(['error' => 'HA returned HTTP ' . $http_code, 'response' => substr($response, 0, 500)]); exit;
     }
     $data = json_decode($response, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
-        http_response_code(500); echo json_encode(['error' => 'JSON: ' . json_last_error_msg()]); exit;
+        http_response_code(500);
+        echo json_encode([
+            'error'   => 'JSON decode failed: ' . json_last_error_msg(),
+            'preview' => substr($response, 0, 500),
+            'length'  => strlen($response),
+        ]); exit;
     }
     return $data;
 }
