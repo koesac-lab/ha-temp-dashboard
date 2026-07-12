@@ -278,7 +278,7 @@ function repositionHero() {
 repositionHero();
 window.addEventListener('resize', () => { repositionHero(); if (chart) chart.resize(); });
 
-// ── Solar math ──────────────────────────────────────────────────────────────────
+// ── Solar math ─────────────────────────────────────────────────────────────────
 const R = Math.PI / 180;
 function getSunTimes(utcMidnightMs, lat, lon) {
   const jd  = utcMidnightMs / 86400000 + 2440587.5;
@@ -382,7 +382,6 @@ function renderHero(sensorsData){
     const unit = s.unit || (TYPE_CONFIG[s.type||'temperature']?.unit ?? '\u00b0C');
     return `<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
   }).join('');
-  // Portrait: wrap in horizontal scroll row; landscape: bare cards (sidebar is flex-col)
   hero.innerHTML = isLandscape() ? cards : `<div class="hero">${cards}</div>`;
 }
 
@@ -610,11 +609,12 @@ function renderChart(haData) {
 
   haData.forEach(arr => {
     if (!arr||!arr.length) return;
-    const eid  = arr[0].entity_id||'';
-    const meta = sensorsCache ? sensorsCache.find(s=>s.entity_id===eid) : null;
+    const eid   = arr[0].entity_id || '';
+    const meta  = sensorsCache ? sensorsCache.find(s => s.entity_id === eid) : null;
     const stype = meta?.type || 'temperature';
     if (meta?.hidden) return;
-    const label = arr[0].attributes?.friendly_name || eid;
+    // Use friendly name from sensorsCache (attributes are stripped by no_attributes flag)
+    const label = meta?.name || eid;
     const pts = arr
       .map(p => { const ts=luxon.DateTime.fromISO(p.last_changed).toMillis(); const v=parseFloat(p.state); return {x:ts, y:isNaN(v)?null:parseFloat(v.toFixed(2))}; })
       .filter(p => p.y!==null && !isNaN(p.x));
