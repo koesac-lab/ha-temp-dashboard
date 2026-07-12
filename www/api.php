@@ -98,7 +98,8 @@ function detect_sensor_type($state) {
         return 'temperature';
     if ($dc === 'carbon_dioxide' || $unit === 'ppm' || stripos($dc, 'co2') !== false)
         return 'co2';
-    if ($dc === 'humidity' || $unit === '%')
+    // Require device_class for humidity — unit=% alone is too broad (battery, signal, etc.)
+    if ($dc === 'humidity')
         return 'humidity';
     if ($dc === 'aqi' || stripos($dc, 'air_quality') !== false || stripos($unit, 'aqi') !== false)
         return 'aqi';
