@@ -1,8 +1,8 @@
 <?php
 header('Content-Type: application/json');
 
-// Ensure enough resources for large history fetches
-@ini_set('memory_limit', '256M');
+// Single-user container — give PHP plenty of room for large HA responses
+@ini_set('memory_limit', '512M');
 @ini_set('max_execution_time', '120');
 @set_time_limit(120);
 
@@ -61,29 +61,39 @@ function ts(DateTime $dt) {
     return $dt->format('Y-m-d\TH:i:s\Z');
 }
 
-// Fetch one history window and accumulate into &$raw / &$names.
+// Fetch one history window for a SINGLE entity and accumulate into &$raw / &$names.
+// Fetching one entity at a time keeps individual HA responses small and avoids OOM.
 function fetch_chunk($entity_ids, DateTime $start, DateTime $end, &$raw, &$names) {
-    $ids  = array_map('trim', explode(',', $entity_ids));
-    $data = ha_get(
-        '/api/history/period/' . ts($start),
-        ['filter_entity_id' => $entity_ids, 'end_time' => ts($end)],
-        ['minimal_response', 'no_attributes']
-    );
-    if (!is_array($data)) return;
-    foreach ($data as $i => $arr) {
-        if (empty($arr)) continue;
-        $eid = $arr[0]['entity_id'] ?? ($ids[$i] ?? '');
-        if (!$eid) continue;
-        if (!isset($names[$eid]))
-            $names[$eid] = $arr[0]['attributes']['friendly_name'] ?? $eid;
-        if (!isset($raw[$eid])) $raw[$eid] = [];
-        foreach ($arr as $pt) {
-            $val = is_numeric($pt['state']) ? floatval($pt['state']) : null;
-            if ($val === null) continue;
-            $ts = strtotime($pt['last_changed']);
-            if ($ts === false) continue;
-            $raw[$eid][] = [$ts, $val];
+    $ids = array_filter(array_map('trim', explode(',', $entity_ids)));
+
+    // Batch into groups of 3 to keep individual HA responses manageable
+    $batches = array_chunk($ids, 3);
+
+    foreach ($batches as $batch) {
+        $batch_str = implode(',', $batch);
+        $data = ha_get(
+            '/api/history/period/' . ts($start),
+            ['filter_entity_id' => $batch_str, 'end_time' => ts($end)],
+            ['minimal_response', 'no_attributes']
+        );
+        if (!is_array($data)) continue;
+        foreach ($data as $i => $arr) {
+            if (empty($arr)) continue;
+            $eid = $arr[0]['entity_id'] ?? ($batch[$i] ?? '');
+            if (!$eid) continue;
+            if (!isset($names[$eid]))
+                $names[$eid] = $arr[0]['attributes']['friendly_name'] ?? $eid;
+            if (!isset($raw[$eid])) $raw[$eid] = [];
+            foreach ($arr as $pt) {
+                $val = is_numeric($pt['state']) ? floatval($pt['state']) : null;
+                if ($val === null) continue;
+                $ts = strtotime($pt['last_changed']);
+                if ($ts === false) continue;
+                $raw[$eid][] = [$ts, $val];
+            }
         }
+        // Free the decoded array immediately after processing
+        unset($data);
     }
 }
 
