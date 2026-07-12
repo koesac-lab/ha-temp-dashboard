@@ -135,7 +135,7 @@ if ($action === 'sensors') {
     exit;
 }
 
-// ── History: raw state changes (≤ 30 days) ─────────────────────────────────────
+// ── History: adaptive downsampling based on requested range ────────────────────
 if ($action === 'history') {
     $days = max(1, min(30, intval($_GET['days'] ?? $config['default_days'])));
     $entity_ids = $_GET['entity_ids'] ?? implode(',', $config['default_sensors']);
@@ -146,18 +146,40 @@ if ($action === 'history') {
     $start = (clone $end)->modify("-{$days} days");
     fetch_chunk($entity_ids, $start, $end, $raw, $names);
 
+    // Adaptive bucket size based on range (minutes)
+    $bucket_minutes = 5;
+    if ($days >= 30)      $bucket_minutes = 60;
+    elseif ($days >= 14)  $bucket_minutes = 30;
+    elseif ($days >= 7)   $bucket_minutes = 15;
+    elseif ($days >= 3)   $bucket_minutes = 10;
+    // Allow manual override: ?resolution=N (minutes)
+    if (isset($_GET['resolution'])) {
+        $r = intval($_GET['resolution']);
+        if ($r >= 1) $bucket_minutes = $r;
+    }
+    $bucket_secs = $bucket_minutes * 60;
+
     $result = [];
     foreach ($raw as $eid => $points) {
-        $out = [];
+        if (empty($points)) continue;
+        $buckets = [];
         foreach ($points as [$ts, $val]) {
+            $b = $ts - ($ts % $bucket_secs);
+            if (!isset($buckets[$b])) $buckets[$b] = [0.0, 0];
+            $buckets[$b][0] += $val;
+            $buckets[$b][1]++;
+        }
+        ksort($buckets);
+        $out = [];
+        foreach ($buckets as $b => [$sum, $cnt]) {
             $out[] = [
                 'entity_id'    => $eid,
-                'state'        => $val,
-                'last_changed' => gmdate('Y-m-d\TH:i:s\Z', $ts),
+                'state'        => round($sum / $cnt, 2),
+                'last_changed' => gmdate('Y-m-d\TH:i:s\Z', $b),
                 'attributes'   => ['friendly_name' => $names[$eid] ?? $eid],
             ];
         }
-        if (!empty($out)) $result[] = $out;
+        $result[] = $out;
     }
     echo json_encode($result);
     exit;
