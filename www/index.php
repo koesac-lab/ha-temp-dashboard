@@ -51,7 +51,10 @@ $longitude = $config['longitude'] ?? -0.1278;
     min-height: 100dvh; overflow-x: hidden;
   }
 
-  /* ── Hero cards (portrait / default) ── */
+  /* ── Sidebar: hidden by default, only shown in landscape ── */
+  #sidebar { display: none; }
+
+  /* ── Hero cards ── */
   .hero { display:flex; gap:12px; padding:14px 16px 10px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
   .hero::-webkit-scrollbar { display:none; }
   .hero-card {
@@ -69,6 +72,7 @@ $longitude = $config['longitude'] ?? -0.1278;
   .hero-empty { padding:14px 16px 10px; font-size:0.85rem; color:var(--text2); flex-shrink:0; }
 
   /* ── Main layout ── */
+  .main-body { flex:1; display:flex; flex-direction:column; min-height:0; min-width:0; }
   .main-area { flex:1; display:flex; flex-direction:row; min-height:0; padding:0 12px; gap:10px; }
   .chart-hero { flex:1; min-height:0; min-width:0; }
   .chart-wrap {
@@ -133,11 +137,11 @@ $longitude = $config['longitude'] ?? -0.1278;
     .sensor-drawer { left:auto; right:24px; bottom:24px; width:360px; border-radius:24px; max-height:60dvh; }
   }
 
-  /* ── Landscape mobile: cards move to left sidebar, chart fills full height ── */
+  /* ── Landscape mobile ── */
   @media (max-height:500px) and (orientation:landscape) {
     body { flex-direction: row; overflow: hidden; height: 100dvh; }
 
-    /* Left sidebar: hero cards stacked vertically + controls at bottom */
+    /* Show sidebar, hide portrait-only elements */
     #sidebar {
       display: flex;
       flex-direction: column;
@@ -150,52 +154,41 @@ $longitude = $config['longitude'] ?? -0.1278;
       gap: 6px;
     }
     #sidebar::-webkit-scrollbar { display: none; }
+    #heroPortrait { display: none; }
+    #controlsPortrait { display: none !important; }
+    .status-bar { display: none; }
 
-    /* Hero cards become compact vertical stack in sidebar */
-    #heroArea { display:contents; }
-    .hero {
-      display: contents;
-    }
+    /* Hero cards: compact vertical stack */
     .hero-card {
-      width: 100%;
-      min-width: 0;
-      padding: 6px 8px;
-      border-radius: 10px;
+      width: 100%; min-width: 0;
+      padding: 6px 8px; border-radius: 10px;
     }
     .hero-card .label { font-size:0.6rem; max-width:none; }
     .hero-card .temp { font-size:1.2rem; }
     .hero-card .temp span { font-size:0.72rem; }
     .hero-empty { padding: 8px; font-size:0.75rem; }
 
-    /* Sidebar controls (vertical) */
-    .controls {
+    /* Sidebar controls */
+    #sidebar .controls {
       flex-direction: column;
       align-items: stretch;
       padding: 0;
       gap: 5px;
     }
-    .controls .spacer { display:none; }
-    .controls .pill { justify-content:center; padding:6px 8px; font-size:0.75rem; }
-    select.pill { padding-right:22px; background-position: right 6px center; }
-    .status-bar { display:none; }
+    #sidebar .controls .spacer { display: none; }
+    #sidebar .controls .pill { justify-content:center; padding:6px 8px; font-size:0.75rem; }
+    #sidebar select.pill { padding-right:22px; background-position: right 6px center; }
 
-    /* Chart fills remaining space */
-    .main-body {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      padding: 6px 8px 6px 6px;
-      gap: 0;
-    }
-    .main-area { flex:1; padding:0; }
-    .chart-hero { flex:1; min-height:0; }
+    /* Main body fills remaining space */
+    .main-body { flex:1; padding: 6px 8px 6px 4px; }
+    .main-area { padding: 0; }
     .chart-wrap { padding:8px 6px 6px; border-radius:10px; }
   }
 </style>
 </head>
 <body>
-  <!-- Landscape sidebar (only used in landscape media query) -->
+
+  <!-- Landscape-only sidebar -->
   <div id="sidebar">
     <div id="heroArea"></div>
     <div class="controls">
@@ -214,9 +207,8 @@ $longitude = $config['longitude'] ?? -0.1278;
   </div>
 
   <!-- Portrait main body -->
-  <div class="main-body" style="flex:1;display:flex;flex-direction:column;min-height:0;min-width:0;">
-    <!-- Portrait hero (hidden in landscape via display:contents trick) -->
-    <div id="heroPortrait"></div>
+  <div class="main-body">
+    <div id="heroPortrait"><div id="heroArea"></div></div>
     <div class="main-area">
       <div class="chart-hero">
         <div class="chart-wrap"><canvas id="chart"></canvas></div>
@@ -256,39 +248,37 @@ let chart = null;
 let selectedSensors = new Set(defaultSensors);
 let sensorsCache    = null;
 
-// Sync both days selects
-function getDays() { return parseInt(isLandscape() ? document.getElementById('days').value : document.getElementById('daysP').value); }
+function isLandscape() {
+  return window.matchMedia('(max-height:500px) and (orientation:landscape)').matches;
+}
+function isDark() { return window.matchMedia('(prefers-color-scheme:dark)').matches; }
+
+function getDays() {
+  return parseInt(isLandscape()
+    ? document.getElementById('days').value
+    : document.getElementById('daysP').value);
+}
 function setDaysValue(v) {
   document.getElementById('days').value  = v;
   document.getElementById('daysP').value = v;
 }
 setDaysValue(defaultDays);
 
-function isLandscape() {
-  return window.matchMedia('(max-height:500px) and (orientation:landscape)').matches;
-}
-
-function isDark() { return window.matchMedia('(prefers-color-scheme:dark)').matches; }
-
-// In landscape the sidebar holds heroArea; in portrait we move it to heroPortrait
+// Move #heroArea between sidebar (landscape) and #heroPortrait (portrait)
 function repositionHero() {
-  const heroArea   = document.getElementById('heroArea');
-  const sidebar    = document.getElementById('sidebar');
-  const portrait   = document.getElementById('heroPortrait');
-  const ctrlP      = document.getElementById('controlsPortrait');
+  const heroArea = document.getElementById('heroArea');
+  const sidebar  = document.getElementById('sidebar');
+  const portrait = document.getElementById('heroPortrait');
   if (isLandscape()) {
-    // sidebar already has heroArea as first child by default
     if (heroArea.parentNode !== sidebar) sidebar.insertBefore(heroArea, sidebar.firstChild);
-    ctrlP.style.display = 'none';
   } else {
-    if (heroArea.parentNode !== portrait) portrait.appendChild(heroArea);
-    ctrlP.style.display = '';
+    if (heroArea.parentNode !== portrait) portrait.insertBefore(heroArea, portrait.firstChild);
   }
 }
 repositionHero();
-window.addEventListener('resize', () => { repositionHero(); if (chart) { chart.resize(); } });
+window.addEventListener('resize', () => { repositionHero(); if (chart) chart.resize(); });
 
-// ── Solar math ───────────────────────────────────────────────────────────────────
+// ── Solar math ──────────────────────────────────────────────────────────────────
 const R = Math.PI / 180;
 function getSunTimes(utcMidnightMs, lat, lon) {
   const jd  = utcMidnightMs / 86400000 + 2440587.5;
@@ -341,7 +331,7 @@ function buildSolarBands(startMs, endMs, lat, lon) {
   return bands;
 }
 
-// ── Temperature colour ─────────────────────────────────────────────────────────────
+// ── Temperature colour ──────────────────────────────────────────────────────────
 const TEMP_SCALE=[
   {t:10,r:96,g:165,b:250},{t:18,r:52,g:211,b:153},
   {t:22,r:251,g:191,b:36},{t:26,r:251,g:146,b:60},{t:32,r:239,g:68,b:68}
@@ -356,7 +346,7 @@ function tempToRgb(t){
 }
 function tempToColor(t,alpha=1){const{r,g,b}=tempToRgb(t);return`rgba(${r},${g},${b},${alpha})`;}
 
-// ── Sensor type config ─────────────────────────────────────────────────────────
+// ── Sensor type config ──────────────────────────────────────────────────────────
 const TYPE_CONFIG = {
   temperature: { axis: 'y',  unit: '\u00b0C', label: 'Temperature', color: null },
   co2:         { axis: 'y2', unit: 'ppm',     label: 'CO\u2082',    color: 'rgba(251,146,60,{a})' },
@@ -369,7 +359,7 @@ function typeColor(type, val, alpha=1) {
   return tmpl.replace('{a}', alpha);
 }
 
-// ── Prefs / Hero / Drawer ───────────────────────────────────────────────────────────
+// ── Prefs ───────────────────────────────────────────────────────────────────────
 async function savePrefs(extra={}){
   try{
     await fetch('api.php?action=save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -377,65 +367,64 @@ async function savePrefs(extra={}){
   }catch(e){console.warn('prefs:',e);}
 }
 
+// ── Hero render ─────────────────────────────────────────────────────────────────
 function renderHero(sensorsData){
-  const hero=document.getElementById('heroArea');
-  if(!sensorsData||!sensorsData.length){hero.innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';return;}
-  const sel=sensorsData.filter(s=>selectedSensors.has(s.entity_id)&&!s.hidden);
-  if(!sel.length){hero.innerHTML='';return;}
-  const landscape = isLandscape();
-  // In landscape: vertical stack (no .hero wrapper needed, cards are direct children)
-  // In portrait: horizontal scroll row
-  if (landscape) {
-    hero.innerHTML = sel.map(s=>{
-      const v=parseFloat(s.state);
-      const col=isNaN(v)?'var(--text2)':typeColor(s.type||'temperature',v);
-      const unit=s.unit||(TYPE_CONFIG[s.type||'temperature']?.unit??'\u00b0C');
-      return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
-    }).join('');
-  } else {
-    hero.innerHTML='<div class="hero">'+sel.map(s=>{
-      const v=parseFloat(s.state);
-      const col=isNaN(v)?'var(--text2)':typeColor(s.type||'temperature',v);
-      const unit=s.unit||(TYPE_CONFIG[s.type||'temperature']?.unit??'\u00b0C');
-      return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
-    }).join('')+'</div>';
+  const hero = document.getElementById('heroArea');
+  if (!sensorsData||!sensorsData.length) {
+    hero.innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
+    return;
   }
+  const sel = sensorsData.filter(s => selectedSensors.has(s.entity_id) && !s.hidden);
+  if (!sel.length) { hero.innerHTML = ''; return; }
+  const cards = sel.map(s => {
+    const v = parseFloat(s.state);
+    const col = isNaN(v) ? 'var(--text2)' : typeColor(s.type||'temperature', v);
+    const unit = s.unit || (TYPE_CONFIG[s.type||'temperature']?.unit ?? '\u00b0C');
+    return `<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
+  }).join('');
+  // Portrait: wrap in horizontal scroll row; landscape: bare cards (sidebar is flex-col)
+  hero.innerHTML = isLandscape() ? cards : `<div class="hero">${cards}</div>`;
 }
 
+// ── Sensors / Drawer ────────────────────────────────────────────────────────────
 async function loadSensors(){
-  if(sensorsCache)return sensorsCache;
-  const r=await fetch('api.php?action=sensors');const s=await r.json();
-  if(!Array.isArray(s))throw new Error('bad');
-  sensorsCache=s;return s;
+  if (sensorsCache) return sensorsCache;
+  const r = await fetch('api.php?action=sensors');
+  const s = await r.json();
+  if (!Array.isArray(s)) throw new Error('bad');
+  sensorsCache = s;
+  return s;
 }
 
 async function populateDrawer(){
-  const list=document.getElementById('sensorList');
-  list.innerHTML='<span class="spinner"></span> Loading\u2026';
-  try{
-    const sensors=await loadSensors();renderHero(sensors);
-    const visibleSensors = sensors.filter(s => !s.hidden);
-    if (!visibleSensors.length) {
+  const list = document.getElementById('sensorList');
+  list.innerHTML = '<span class="spinner"></span> Loading\u2026';
+  try {
+    const sensors = await loadSensors();
+    renderHero(sensors);
+    const visible = sensors.filter(s => !s.hidden);
+    if (!visible.length) {
       list.innerHTML = `<p class="drawer-empty">All sensors are hidden.<br><a href="settings.php#sensors">Manage hidden sensors \u2192</a></p>
         <div class="drawer-footer"><a href="settings.php#sensors">Manage hidden sensors \u2192</a></div>`;
       return;
     }
-    list.innerHTML='';
+    list.innerHTML = '';
     const TYPE_ORDER  = ['temperature','co2','humidity','aqi'];
     const TYPE_LABELS = {temperature:'\ud83c\udf21\ufe0f Temperature',co2:'\ud83d\udca8 CO\u2082',humidity:'\ud83d\udca7 Humidity',aqi:'\ud83c\udf2b\ufe0f AQI'};
-    TYPE_ORDER.forEach(type=>{
-      const group=visibleSensors.filter(s=>s.type===type);
-      if(!group.length)return;
-      const hdr=document.createElement('p');
-      hdr.className='sensor-group-label';
-      hdr.textContent=TYPE_LABELS[type]||type;
+    TYPE_ORDER.forEach(type => {
+      const group = visible.filter(s => s.type === type);
+      if (!group.length) return;
+      const hdr = document.createElement('p');
+      hdr.className = 'sensor-group-label';
+      hdr.textContent = TYPE_LABELS[type] || type;
       list.appendChild(hdr);
-      group.forEach(s=>{
-        const div=document.createElement('div');div.className='sensor-item';
-        const v=parseFloat(s.state);
-        const col=isNaN(v)?'var(--text2)':typeColor(s.type,v);
-        const unit=s.unit||(TYPE_CONFIG[s.type]?.unit??'');
-        div.innerHTML=`
+      group.forEach(s => {
+        const div = document.createElement('div');
+        div.className = 'sensor-item';
+        const v = parseFloat(s.state);
+        const col = isNaN(v) ? 'var(--text2)' : typeColor(s.type, v);
+        const unit = s.unit || (TYPE_CONFIG[s.type]?.unit ?? '');
+        div.innerHTML = `
           <input type="checkbox" id="cb_${s.entity_id}" value="${s.entity_id}" ${selectedSensors.has(s.entity_id)?'checked':''}>
           <label for="cb_${s.entity_id}">${s.name}</label>
           <button class="hide-btn" data-id="${s.entity_id}">Hide</button>
@@ -447,11 +436,11 @@ async function populateDrawer(){
     footer.className = 'drawer-footer';
     footer.innerHTML = '<a href="settings.php#sensors">Manage hidden sensors \u2192</a>';
     list.appendChild(footer);
-    list.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
-      cb.checked?selectedSensors.add(cb.value):selectedSensors.delete(cb.value);
-      renderHero(sensorsCache);savePrefs();updateChart();
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', () => {
+      cb.checked ? selectedSensors.add(cb.value) : selectedSensors.delete(cb.value);
+      renderHero(sensorsCache); savePrefs(); updateChart();
     }));
-    list.querySelectorAll('.hide-btn').forEach(btn=>btn.addEventListener('click', async () => {
+    list.querySelectorAll('.hide-btn').forEach(btn => btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
       const s = sensorsCache.find(x => x.entity_id === id);
       if (!s) return;
@@ -459,41 +448,34 @@ async function populateDrawer(){
       selectedSensors.delete(id);
       const hidden = sensorsCache.filter(x => x.hidden).map(x => x.entity_id);
       await savePrefs({ hidden_sensors: hidden });
-      renderHero(sensorsCache);
-      updateChart();
-      populateDrawer();
+      renderHero(sensorsCache); updateChart(); populateDrawer();
     }));
-  }catch(e){list.innerHTML='<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>';}
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--text2);padding:8px 0">Error loading sensors</p>';
+  }
 }
 
-function openDrawer(){document.getElementById('sensorDrawer').classList.add('open');document.getElementById('drawerBackdrop').classList.add('open');populateDrawer();}
-function closeDrawer(){document.getElementById('sensorDrawer').classList.remove('open');document.getElementById('drawerBackdrop').classList.remove('open');}
+function openDrawer()  { document.getElementById('sensorDrawer').classList.add('open');    document.getElementById('drawerBackdrop').classList.add('open');    populateDrawer(); }
+function closeDrawer() { document.getElementById('sensorDrawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
 
-// Wire up both sets of controls
-['toggleSensors','toggleSensorsP'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('click',openDrawer);});
-document.getElementById('drawerBackdrop').addEventListener('click',closeDrawer);
-document.getElementById('drawerClose').addEventListener('click',closeDrawer);
-['updateBtn','updateBtnP'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('click',()=>{savePrefs();updateChart();});});
-['days','daysP'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(!el)return;
-  el.addEventListener('change',()=>{
-    setDaysValue(el.value);
-    savePrefs();updateChart();
-  });
+document.getElementById('drawerBackdrop').addEventListener('click', closeDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+['toggleSensors','toggleSensorsP'].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener('click', openDrawer); });
+['updateBtn','updateBtnP'].forEach(id => { const el=document.getElementById(id); if(el) el.addEventListener('click', () => { savePrefs(); updateChart(); }); });
+['days','daysP'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', () => { setDaysValue(el.value); savePrefs(); updateChart(); });
 });
 
-// ── Chart update ───────────────────────────────────────────────────────────────
-async function updateChart(){
+// ── Chart update ────────────────────────────────────────────────────────────────
+async function updateChart() {
   const days = getDays();
-  const activeSensors = sensorsCache
-    ? Array.from(selectedSensors).filter(id=>{
-        const s=sensorsCache.find(x=>x.entity_id===id);
-        return s && !s.hidden;
-      })
+  const active = sensorsCache
+    ? Array.from(selectedSensors).filter(id => { const s=sensorsCache.find(x=>x.entity_id===id); return s&&!s.hidden; })
     : Array.from(selectedSensors);
-  const ids=activeSensors.join(',');
-  if(!ids){setStatus('Select at least one sensor');return;}
+  const ids = active.join(',');
+  if (!ids) { setStatus('Select at least one sensor'); return; }
 
   const useLTS = days > LTS_THRESHOLD;
   const endpoint = useLTS
@@ -501,118 +483,113 @@ async function updateChart(){
     : `api.php?action=history&days=${days}&entity_ids=${encodeURIComponent(ids)}`;
 
   setStatus('<span class="spinner"></span> Loading\u2026');
-  try{
-    const res = await fetch(endpoint);
+  try {
+    const res  = await fetch(endpoint);
     const text = await res.text();
     let data;
-    try {
-      data = JSON.parse(text);
-    } catch(parseErr) {
-      console.error('JSON parse failed. HTTP', res.status, '\nResponse length:', text.length, '\nFirst 500 chars:', text.slice(0, 500));
+    try { data = JSON.parse(text); }
+    catch(e) {
+      console.error('JSON parse failed. HTTP', res.status, '\nLength:', text.length, '\nPreview:', text.slice(0,500));
       setStatus(`Error: Response malformed (HTTP ${res.status}, ${text.length} bytes) \u2014 check console`);
       return;
     }
     if (!res.ok || !Array.isArray(data)) {
-      const msg = data?.error || data?.message || JSON.stringify(data).slice(0, 120);
-      const detail = data?.preview ? ` \u00b7 preview: ${data.preview.slice(0,80)}` : '';
+      const msg    = data?.error || data?.message || JSON.stringify(data).slice(0,120);
+      const detail = data?.preview ? ` \u00b7 ${data.preview.slice(0,80)}` : '';
       const size   = data?.length  ? ` \u00b7 ${data.length} bytes` : '';
       console.error('API error:', data);
       setStatus(`Error (HTTP ${res.status}): ${msg}${size}${detail}`);
       return;
     }
     const label = days >= 365 ? '1 year' : days >= 90 ? '3 months' : `${days} day${days>1?'s':''}`;
-    const mode  = useLTS ? ' \u00b7 hourly averages' : '';
     renderChart(data);
-    setStatus(`${label}${mode} \u00b7 updated ${luxon.DateTime.now().toFormat('HH:mm')}`);
-  }catch(e){
-    console.error('updateChart exception:', e);
+    setStatus(`${label}${useLTS?' \u00b7 hourly avg':''} \u00b7 ${luxon.DateTime.now().toFormat('HH:mm')}`);
+  } catch(e) {
+    console.error('updateChart:', e);
     setStatus('Error: ' + e.message);
   }
 }
-function setStatus(html){document.getElementById('status').innerHTML=html;}
+function setStatus(html) { document.getElementById('status').innerHTML = html; }
 
-// ── Day/Night plugin ───────────────────────────────────────────────────────────────
-let solarBands=[];
-const dayNightPlugin={
-  id:'dayNight',
-  beforeDraw(ci){
-    const{ctx,chartArea:ca,scales}=ci;
-    if(!ca||!solarBands.length)return;
-    const xs=scales.x,dark=isDark();
-    const NIGHT   = dark?'rgba(20,20,80,0.55)' :'rgba(30,41,120,0.08)';
-    const TWIL    = dark?'rgba(251,146,60,0.18)':'rgba(251,191,36,0.12)';
-    const SR_LINE = dark?'rgba(251,146,60,0.55)':'rgba(251,146,60,0.55)';
+// ── Day/Night plugin ────────────────────────────────────────────────────────────
+let solarBands = [];
+const dayNightPlugin = {
+  id: 'dayNight',
+  beforeDraw(ci) {
+    const { ctx, chartArea:ca, scales } = ci;
+    if (!ca || !solarBands.length) return;
+    const xs=scales.x, dark=isDark();
+    const NIGHT   = dark ? 'rgba(20,20,80,0.55)'  : 'rgba(30,41,120,0.08)';
+    const TWIL    = dark ? 'rgba(251,146,60,0.18)' : 'rgba(251,191,36,0.12)';
+    const SR_LINE = 'rgba(251,146,60,0.55)';
     ctx.save();
-    ctx.beginPath();ctx.rect(ca.left,ca.top,ca.width,ca.height);ctx.clip();
-    solarBands.forEach(band=>{
-      const fromX=xs.getPixelForValue(band.from),toX=xs.getPixelForValue(band.to);
-      if(toX<=ca.left||fromX>=ca.right)return;
-      const x0=Math.max(fromX,ca.left),x1=Math.min(toX,ca.right),w=x1-x0;
-      if(w<=0)return;
-      if(band.type==='night'){
-        ctx.fillStyle=NIGHT;ctx.fillRect(x0,ca.top,w,ca.height);
-      }else if(band.type==='twilight'){
-        const grad=ctx.createLinearGradient(x0,0,x1,0);
-        const isDawn=band.phase==='dawn';
-        grad.addColorStop(0,isDawn?NIGHT:TWIL);grad.addColorStop(1,isDawn?TWIL:NIGHT);
-        ctx.fillStyle=grad;ctx.fillRect(x0,ca.top,w,ca.height);
+    ctx.beginPath(); ctx.rect(ca.left,ca.top,ca.width,ca.height); ctx.clip();
+    solarBands.forEach(band => {
+      const fx=xs.getPixelForValue(band.from), tx=xs.getPixelForValue(band.to);
+      if (tx<=ca.left||fx>=ca.right) return;
+      const x0=Math.max(fx,ca.left), x1=Math.min(tx,ca.right), w=x1-x0;
+      if (w<=0) return;
+      if (band.type==='night') {
+        ctx.fillStyle=NIGHT; ctx.fillRect(x0,ca.top,w,ca.height);
+      } else if (band.type==='twilight') {
+        const g=ctx.createLinearGradient(x0,0,x1,0);
+        const dawn=band.phase==='dawn';
+        g.addColorStop(0,dawn?NIGHT:TWIL); g.addColorStop(1,dawn?TWIL:NIGHT);
+        ctx.fillStyle=g; ctx.fillRect(x0,ca.top,w,ca.height);
       }
     });
-    solarBands.forEach(band=>{
-      if(band.type!=='day')return;
-      [band.from,band.to].forEach(ts=>{
+    solarBands.forEach(band => {
+      if (band.type!=='day') return;
+      [band.from,band.to].forEach(ts => {
         const x=xs.getPixelForValue(ts);
-        if(x<ca.left||x>ca.right)return;
-        ctx.beginPath();ctx.moveTo(x,ca.top);ctx.lineTo(x,ca.bottom);
-        ctx.strokeStyle=SR_LINE;ctx.lineWidth=1;ctx.setLineDash([3,5]);ctx.stroke();ctx.setLineDash([]);
+        if (x<ca.left||x>ca.right) return;
+        ctx.beginPath(); ctx.moveTo(x,ca.top); ctx.lineTo(x,ca.bottom);
+        ctx.strokeStyle=SR_LINE; ctx.lineWidth=1; ctx.setLineDash([3,5]); ctx.stroke(); ctx.setLineDash([]);
       });
     });
     ctx.restore();
   }
 };
 
-// ── Smooth glow line plugin ────────────────────────────────────────────────────────────
-const smoothGlowPlugin={
-  id:'smoothGlow',
-  beforeDatasetsDraw(ci){
-    const ctx=ci.ctx;
-    ci.data.datasets.forEach((ds,di)=>{
-      const meta=ci.getDatasetMeta(di);
-      if(!meta.visible||!meta.data.length)return;
-      const pts=meta.data,raw=ds.data;
-      if(pts.length<2)return;
-      const stype=ds._stype||'temperature';
+// ── Smooth glow plugin ──────────────────────────────────────────────────────────
+const smoothGlowPlugin = {
+  id: 'smoothGlow',
+  beforeDatasetsDraw(ci) {
+    const ctx = ci.ctx;
+    ci.data.datasets.forEach((ds,di) => {
+      const meta = ci.getDatasetMeta(di);
+      if (!meta.visible||!meta.data.length) return;
+      const pts=meta.data, raw=ds.data;
+      if (pts.length<2) return;
+      const stype = ds._stype||'temperature';
       ctx.save();
-      const{left,right,top,bottom}=ci.chartArea;
-      ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
-      const sampleVal=raw.find(p=>p&&p.y!=null)?.y??20;
-      const solidColor=typeColor(stype,sampleVal,1);
-      const glowColor =typeColor(stype,sampleVal,0.15);
-      function drawPass(lw,color){
-        ctx.lineWidth=lw;ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle=color;
-        for(let i=0;i<pts.length-1;i++){
-          const p0=pts[i],p1=pts[i+1];
-          if(p0.skip||p1.skip)continue;
-          if(stype==='temperature'){
-            const t0=raw[i]?.y??20,t1=raw[i+1]?.y??20;
+      const {left,right,top,bottom} = ci.chartArea;
+      ctx.beginPath(); ctx.rect(left,top,right-left,bottom-top); ctx.clip();
+      const sv = raw.find(p=>p&&p.y!=null)?.y ?? 20;
+      function drawPass(lw, color) {
+        ctx.lineWidth=lw; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.strokeStyle=color;
+        for (let i=0;i<pts.length-1;i++) {
+          const p0=pts[i], p1=pts[i+1];
+          if (p0.skip||p1.skip) continue;
+          if (stype==='temperature') {
             const g=ctx.createLinearGradient(p0.x,p0.y,p1.x,p1.y);
-            const alpha=lw>4?0.15:1.0;
-            g.addColorStop(0,tempToColor(t0,alpha));g.addColorStop(1,tempToColor(t1,alpha));
+            const a=lw>4?0.15:1.0;
+            g.addColorStop(0,tempToColor(raw[i]?.y??20,a)); g.addColorStop(1,tempToColor(raw[i+1]?.y??20,a));
             ctx.strokeStyle=g;
           }
-          ctx.beginPath();ctx.moveTo(p0.x,p0.y);
-          if(p0.cp2x!==undefined)ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
+          ctx.beginPath(); ctx.moveTo(p0.x,p0.y);
+          if (p0.cp2x!==undefined) ctx.bezierCurveTo(p0.cp2x,p0.cp2y,p1.cp1x,p1.cp1y,p1.x,p1.y);
           else ctx.lineTo(p1.x,p1.y);
           ctx.stroke();
         }
       }
-      if(stype==='temperature'){ drawPass(12,glowColor); drawPass(3,solidColor); }
-      else { drawPass(12,glowColor); drawPass(2,solidColor); }
-      ctx.globalAlpha=1;ctx.restore();
+      if (stype==='temperature') { drawPass(12,typeColor(stype,sv,0.15)); drawPass(3,typeColor(stype,sv,1)); }
+      else { drawPass(12,typeColor(stype,sv,0.15)); drawPass(2,typeColor(stype,sv,1)); }
+      ctx.globalAlpha=1; ctx.restore();
     });
-    ci.data.datasets.forEach((_,di)=>{
+    ci.data.datasets.forEach((_,di) => {
       const o=ci.getDatasetMeta(di).dataset.options;
-      if(o){o.borderColor='transparent';o.backgroundColor='transparent';}
+      if (o) { o.borderColor='transparent'; o.backgroundColor='transparent'; }
     });
   }
 };
@@ -620,132 +597,96 @@ const smoothGlowPlugin={
 Chart.register(dayNightPlugin);
 Chart.register(smoothGlowPlugin);
 
-// ── Render chart ───────────────────────────────────────────────────────────────
-function renderChart(haData){
-  const ctx=document.getElementById('chart').getContext('2d');
-  const datasets=[];
-  let xMin=Infinity,xMax=-Infinity;
-  let hasY2=false,hasY3=false;
-  const small = window.innerWidth < 480;      // portrait phone
-  const land  = isLandscape();                 // landscape phone
-  const compact = small || land;
+// ── Render chart ────────────────────────────────────────────────────────────────
+function renderChart(haData) {
+  const ctx      = document.getElementById('chart').getContext('2d');
+  const datasets = [];
+  let xMin=Infinity, xMax=-Infinity, hasY2=false, hasY3=false;
+  const land    = isLandscape();
+  const small   = window.innerWidth < 480;
+  const compact = land || small;
+  const tickSz  = compact ? 9 : 11;
+  const showAxisTitles = !compact;
 
-  haData.forEach(arr=>{
-    if(!arr||!arr.length)return;
-    const eid=arr[0].entity_id||'';
-    const meta=sensorsCache?sensorsCache.find(s=>s.entity_id===eid):null;
-    const stype=(meta?.type)||'temperature';
-    if(meta?.hidden)return;
-    const label=arr[0].attributes?.friendly_name||eid;
-    const pts=arr
-      .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};})
-      .filter(p=>p.y!==null&&!isNaN(p.x));
-    if(!pts.length)return;
-    xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);
-    const axisCfg=TYPE_CONFIG[stype]||TYPE_CONFIG.temperature;
-    if(axisCfg.axis==='y2')hasY2=true;
-    if(axisCfg.axis==='y3')hasY3=true;
-    datasets.push({
-      label,data:pts,
-      yAxisID:axisCfg.axis,
-      borderColor:'transparent',backgroundColor:'transparent',
-      fill:false,tension:0.4,pointRadius:0,pointHitRadius:14,
-      borderWidth:0,spanGaps:false,
-      _stype:stype,
-    });
+  haData.forEach(arr => {
+    if (!arr||!arr.length) return;
+    const eid  = arr[0].entity_id||'';
+    const meta = sensorsCache ? sensorsCache.find(s=>s.entity_id===eid) : null;
+    const stype = meta?.type || 'temperature';
+    if (meta?.hidden) return;
+    const label = arr[0].attributes?.friendly_name || eid;
+    const pts = arr
+      .map(p => { const ts=luxon.DateTime.fromISO(p.last_changed).toMillis(); const v=parseFloat(p.state); return {x:ts, y:isNaN(v)?null:parseFloat(v.toFixed(2))}; })
+      .filter(p => p.y!==null && !isNaN(p.x));
+    if (!pts.length) return;
+    xMin=Math.min(xMin,pts[0].x); xMax=Math.max(xMax,pts[pts.length-1].x);
+    const axisCfg = TYPE_CONFIG[stype]||TYPE_CONFIG.temperature;
+    if (axisCfg.axis==='y2') hasY2=true;
+    if (axisCfg.axis==='y3') hasY3=true;
+    datasets.push({ label, data:pts, yAxisID:axisCfg.axis, borderColor:'transparent', backgroundColor:'transparent', fill:false, tension:0.4, pointRadius:0, pointHitRadius:14, borderWidth:0, spanGaps:false, _stype:stype });
   });
 
-  if(xMin<Infinity){
-    solarBands=buildSolarBands(xMin-86400000,xMax+86400000,LOCATION.lat,LOCATION.lon);
-  }
-  if(chart)chart.destroy();
-  const dark=isDark();
-  const gridCol=dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
-  const tickCol=dark?'#6b7280':'#9ca3af';
-  const tickSz  = compact ? 9 : 11;
-  const axisTitleDisplay = !compact;   // hide axis titles on small/landscape to save space
+  if (xMin<Infinity) solarBands=buildSolarBands(xMin-86400000,xMax+86400000,LOCATION.lat,LOCATION.lon);
+  if (chart) chart.destroy();
+  const dark    = isDark();
+  const gridCol = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const tickCol = dark ? '#6b7280' : '#9ca3af';
 
-  chart=new Chart(ctx,{
-    type:'line',data:{datasets},
+  chart = new Chart(ctx, {
+    type:'line', data:{datasets},
     options:{
-      responsive:true,maintainAspectRatio:false,
-      animation:{duration:600,easing:'easeInOutQuart'},
-      interaction:{mode:'index',intersect:false},
-      layout:{ padding: compact ? { right: hasY2&&hasY3 ? 4 : 2 } : {} },
+      responsive:true, maintainAspectRatio:false,
+      animation:{duration:600, easing:'easeInOutQuart'},
+      interaction:{mode:'index', intersect:false},
       plugins:{
         legend:{
-          display:!land,  // hide legend in landscape to save vertical space
+          display: !land,
           labels:{color:tickCol,font:{size:tickSz},boxWidth:10,padding:8,
-            filter:(item,data)=>{
-              const ds=data.datasets[item.datasetIndex];
-              return ds && ds._stype !== 'temperature';
-            }
+            filter:(item,data)=>{ const ds=data.datasets[item.datasetIndex]; return ds&&ds._stype!=='temperature'; }
           }
         },
         tooltip:{
           backgroundColor:dark?'rgba(15,15,19,0.96)':'rgba(255,255,255,0.96)',
-          titleColor:dark?'#f1f1f5':'#1a1a2e',bodyColor:dark?'#d1d5db':'#4b5563',
+          titleColor:dark?'#f1f1f5':'#1a1a2e', bodyColor:dark?'#d1d5db':'#4b5563',
           borderColor:dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
-          borderWidth:1,padding:10,displayColors:true,cornerRadius:10,
+          borderWidth:1, padding:10, displayColors:true, cornerRadius:10,
           callbacks:{
-            labelColor:c=>{
-              const ds=c.chart.data.datasets[c.datasetIndex];
-              const stype=ds._stype||'temperature';
-              const col=typeColor(stype,c.parsed.y);
-              return{borderColor:col,backgroundColor:col,borderRadius:3};
-            },
-            label:c=>{
-              const ds=c.chart.data.datasets[c.datasetIndex];
-              const stype=ds._stype||'temperature';
-              const unit=TYPE_CONFIG[stype]?.unit||'\u00b0C';
-              return` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}${unit}`;
-            }
+            labelColor: c => { const stype=c.chart.data.datasets[c.datasetIndex]._stype||'temperature'; const col=typeColor(stype,c.parsed.y); return {borderColor:col,backgroundColor:col,borderRadius:3}; },
+            label: c => { const stype=c.chart.data.datasets[c.datasetIndex]._stype||'temperature'; const unit=TYPE_CONFIG[stype]?.unit||'\u00b0C'; return ` ${c.dataset.label}: ${c.parsed.y.toFixed(1)}${unit}`; }
           }
         }
       },
       scales:{
-        x:{
-          type:'time',
-          time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM',month:'MMM yy'}},
-          grid:{color:gridCol},border:{display:false},
-          ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:tickSz},
-            maxTicksLimit: compact ? 4 : 8}
-        },
-        y:{
-          position:'left',grid:{color:gridCol},border:{display:false},
-          title:{display:axisTitleDisplay,text:'\u00b0C',color:tickCol,font:{size:tickSz}},
-          ticks:{color:tickCol,font:{size:tickSz},
-            // compact: show integer only e.g. "21°", normal: "21.0°"
-            callback: compact ? v=>Math.round(v)+'\u00b0' : v=>v.toFixed(1)+'\u00b0'
-          }
-        },
+        x:{ type:'time', time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM',month:'MMM yy'}},
+            grid:{color:gridCol}, border:{display:false},
+            ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:tickSz},maxTicksLimit:compact?4:8} },
+        y:{ position:'left', grid:{color:gridCol}, border:{display:false},
+            title:{display:showAxisTitles,text:'\u00b0C',color:tickCol,font:{size:tickSz}},
+            ticks:{color:tickCol,font:{size:tickSz},callback:compact?v=>Math.round(v)+'\u00b0':v=>v.toFixed(1)+'\u00b0'} },
         ...(hasY2?{y2:{
-          position:'right',grid:{drawOnChartArea:false},border:{display:false},
-          title:{display:axisTitleDisplay,text:'CO\u2082 (ppm)',color:'rgba(251,146,60,0.9)',font:{size:tickSz}},
-          ticks:{color:'rgba(251,146,60,0.9)',font:{size:tickSz},
-            callback: compact ? v=>v>=1000?(v/1000).toFixed(1)+'k':v : v=>v
-          },
-          min:400,
+          position:'right', grid:{drawOnChartArea:false}, border:{display:false},
+          title:{display:showAxisTitles,text:'CO\u2082 (ppm)',color:'rgba(251,146,60,0.9)',font:{size:tickSz}},
+          ticks:{color:'rgba(251,146,60,0.9)',font:{size:tickSz},callback:compact?v=>v>=1000?(v/1000).toFixed(1)+'k':v:v=>v},
+          min:400
         }}:{}),
         ...(hasY3?{y3:{
-          position:'right',grid:{drawOnChartArea:false},border:{display:false},
-          title:{display:axisTitleDisplay,text:'% / AQI',color:'rgba(59,130,246,0.9)',font:{size:tickSz}},
+          position:'right', grid:{drawOnChartArea:false}, border:{display:false},
+          title:{display:showAxisTitles,text:'% / AQI',color:'rgba(59,130,246,0.9)',font:{size:tickSz}},
           ticks:{color:'rgba(59,130,246,0.9)',font:{size:tickSz}},
-          min:0,
-          offset:!!hasY2,
-        }}:{}),
+          min:0, offset:!!hasY2
+        }}:{})
       }
     }
   });
 }
 
-window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>{if(chart)updateChart();});
-(async()=>{
-  if(defaultSensors.length){
+window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change', () => { if(chart) updateChart(); });
+(async () => {
+  if (defaultSensors.length) {
     updateChart();
-    try{const s=await loadSensors();renderHero(s);}catch(e){}
-  }else{
-    document.getElementById('heroArea').innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
+    try { const s=await loadSensors(); renderHero(s); } catch(e) {}
+  } else {
+    document.getElementById('heroArea').innerHTML = '<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';
   }
 })();
 </script>
