@@ -50,28 +50,64 @@ $longitude = $config['longitude'] ?? -0.1278;
     display: flex; flex-direction: column;
     min-height: 100dvh; overflow-x: hidden;
   }
-  .hero { display:flex; gap:20px; padding:20px 20px 12px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
+
+  /* ── Hero cards (portrait / default) ── */
+  .hero { display:flex; gap:12px; padding:14px 16px 10px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
   .hero::-webkit-scrollbar { display:none; }
-  .hero-card { flex-shrink:0; background:var(--card); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px 18px; min-width:120px; }
-  .hero-card .label { font-size:0.72rem; font-weight:500; color:var(--text2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px; }
-  .hero-card .temp { font-size:2rem; font-weight:700; letter-spacing:-0.03em; line-height:1; }
-  .hero-card .temp span { font-size:1rem; font-weight:400; color:var(--text2); }
-  .hero-empty { padding:20px 20px 12px; font-size:0.85rem; color:var(--text2); flex-shrink:0; }
-  .chart-hero { flex:1; padding:0 16px; min-height:0; }
-  .chart-wrap { background:var(--card); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-lg); padding:16px 12px 12px; height:100%; }
-  .controls { display:flex; align-items:center; gap:8px; padding:12px 20px; flex-shrink:0; }
-  .pill { display:inline-flex; align-items:center; padding:8px 16px; border-radius:999px; font-size:0.875rem; font-weight:500; cursor:pointer; border:1px solid var(--border); background:var(--card); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); color:var(--text); box-shadow:var(--shadow); transition:transform 0.1s; -webkit-tap-highlight-color:transparent; white-space:nowrap; text-decoration:none; }
+  .hero-card {
+    flex-shrink:0; background:var(--card); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:10px 14px; min-width:100px;
+  }
+  .hero-card .label {
+    font-size:0.68rem; font-weight:500; color:var(--text2); text-transform:uppercase;
+    letter-spacing:0.06em; margin-bottom:3px; white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; max-width:130px;
+  }
+  .hero-card .temp { font-size:1.7rem; font-weight:700; letter-spacing:-0.03em; line-height:1; }
+  .hero-card .temp span { font-size:0.85rem; font-weight:400; color:var(--text2); }
+  .hero-empty { padding:14px 16px 10px; font-size:0.85rem; color:var(--text2); flex-shrink:0; }
+
+  /* ── Main layout ── */
+  .main-area { flex:1; display:flex; flex-direction:row; min-height:0; padding:0 12px; gap:10px; }
+  .chart-hero { flex:1; min-height:0; min-width:0; }
+  .chart-wrap {
+    background:var(--card); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow-lg);
+    padding:12px 8px 10px; height:100%;
+  }
+
+  /* ── Controls / status ── */
+  .controls { display:flex; align-items:center; gap:8px; padding:10px 16px; flex-shrink:0; }
+  .pill {
+    display:inline-flex; align-items:center; padding:7px 14px; border-radius:999px;
+    font-size:0.85rem; font-weight:500; cursor:pointer; border:1px solid var(--border);
+    background:var(--card); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    color:var(--text); box-shadow:var(--shadow); transition:transform 0.1s;
+    -webkit-tap-highlight-color:transparent; white-space:nowrap; text-decoration:none;
+  }
   .pill:active { transform:scale(0.96); }
   .pill.accent { background:var(--accent); color:#fff; border-color:transparent; }
-  select.pill { appearance:none; -webkit-appearance:none; padding-right:28px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; }
+  select.pill {
+    appearance:none; -webkit-appearance:none; padding-right:26px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 10px center;
+  }
   .spacer { flex:1; }
-  .status-bar { padding:0 20px 10px; font-size:0.78rem; color:var(--text2); min-height:18px; }
+  .status-bar { padding:0 16px 8px; font-size:0.75rem; color:var(--text2); min-height:16px; flex-shrink:0; }
+
+  /* ── Drawer ── */
   .drawer-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); z-index:10; }
   .drawer-backdrop.open { display:block; }
-  .sensor-drawer { position:fixed; bottom:0; left:0; right:0; background:var(--card-solid); border-radius:24px 24px 0 0; box-shadow:var(--shadow-lg); z-index:20; transform:translateY(100%); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1); max-height:70dvh; display:flex; flex-direction:column; }
+  .sensor-drawer {
+    position:fixed; bottom:0; left:0; right:0; background:var(--card-solid);
+    border-radius:24px 24px 0 0; box-shadow:var(--shadow-lg); z-index:20;
+    transform:translateY(100%); transition:transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    max-height:75dvh; display:flex; flex-direction:column;
+  }
   .sensor-drawer.open { transform:translateY(0); }
   .drawer-handle { width:36px; height:4px; background:var(--border); border-radius:2px; margin:12px auto 0; flex-shrink:0; }
-  .drawer-header { display:flex; align-items:center; padding:14px 20px 10px; flex-shrink:0; }
+  .drawer-header { display:flex; align-items:center; padding:12px 20px 8px; flex-shrink:0; }
   .drawer-header strong { font-size:1rem; flex:1; }
   .drawer-close { background:none; border:none; color:var(--text2); font-size:1.2rem; cursor:pointer; padding:4px 8px; line-height:1; }
   .sensor-list { overflow-y:auto; padding:0 20px 40px; flex:1; }
@@ -89,38 +125,125 @@ $longitude = $config['longitude'] ?? -0.1278;
   .drawer-empty a { color:var(--accent); }
   .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; vertical-align:middle; margin-right:5px; }
   @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ── Tablet / desktop ── */
   @media (min-width:600px) {
-    .chart-hero { padding:0 24px; }
-    .controls, .hero { padding-left:24px; padding-right:24px; }
+    .main-area { padding:0 20px; }
+    .controls, .hero { padding-left:20px; padding-right:20px; }
     .sensor-drawer { left:auto; right:24px; bottom:24px; width:360px; border-radius:24px; max-height:60dvh; }
+  }
+
+  /* ── Landscape mobile: cards move to left sidebar, chart fills full height ── */
+  @media (max-height:500px) and (orientation:landscape) {
+    body { flex-direction: row; overflow: hidden; height: 100dvh; }
+
+    /* Left sidebar: hero cards stacked vertically + controls at bottom */
+    #sidebar {
+      display: flex;
+      flex-direction: column;
+      width: 110px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: none;
+      padding: 8px 0 8px 8px;
+      gap: 6px;
+    }
+    #sidebar::-webkit-scrollbar { display: none; }
+
+    /* Hero cards become compact vertical stack in sidebar */
+    #heroArea { display:contents; }
+    .hero {
+      display: contents;
+    }
+    .hero-card {
+      width: 100%;
+      min-width: 0;
+      padding: 6px 8px;
+      border-radius: 10px;
+    }
+    .hero-card .label { font-size:0.6rem; max-width:none; }
+    .hero-card .temp { font-size:1.2rem; }
+    .hero-card .temp span { font-size:0.72rem; }
+    .hero-empty { padding: 8px; font-size:0.75rem; }
+
+    /* Sidebar controls (vertical) */
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0;
+      gap: 5px;
+    }
+    .controls .spacer { display:none; }
+    .controls .pill { justify-content:center; padding:6px 8px; font-size:0.75rem; }
+    select.pill { padding-right:22px; background-position: right 6px center; }
+    .status-bar { display:none; }
+
+    /* Chart fills remaining space */
+    .main-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      padding: 6px 8px 6px 6px;
+      gap: 0;
+    }
+    .main-area { flex:1; padding:0; }
+    .chart-hero { flex:1; min-height:0; }
+    .chart-wrap { padding:8px 6px 6px; border-radius:10px; }
   }
 </style>
 </head>
 <body>
-  <div id="heroArea"></div>
-  <div class="chart-hero">
-    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  <!-- Landscape sidebar (only used in landscape media query) -->
+  <div id="sidebar">
+    <div id="heroArea"></div>
+    <div class="controls">
+      <button class="pill accent" id="toggleSensors">Sensors</button>
+      <select class="pill" id="days">
+        <option value="1">1d</option>
+        <option value="7"   <?= $config['default_days'] ==  7 ? 'selected' : '' ?>>7d</option>
+        <option value="14"  <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14d</option>
+        <option value="30"  <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30d</option>
+        <option value="90"  <?= $config['default_days'] == 90 ? 'selected' : '' ?>>3mo</option>
+        <option value="365" <?= $config['default_days'] == 365 ? 'selected' : '' ?>>1yr</option>
+      </select>
+      <button class="pill" id="updateBtn">&#8635;</button>
+      <a class="pill" href="settings.php">&#9881;</a>
+    </div>
   </div>
-  <div class="controls">
-    <button class="pill accent" id="toggleSensors">Sensors</button>
-    <select class="pill" id="days">
-      <option value="1">1 day</option>
-      <option value="7"   <?= $config['default_days'] ==  7 ? 'selected' : '' ?>>7 days</option>
-      <option value="14"  <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14 days</option>
-      <option value="30"  <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
-      <option value="90"  <?= $config['default_days'] == 90 ? 'selected' : '' ?>>3 months &#x2605;</option>
-      <option value="365" <?= $config['default_days'] == 365 ? 'selected' : '' ?>>1 year &#x2605;</option>
-    </select>
-    <div class="spacer"></div>
-    <button class="pill" id="updateBtn">&#8635;</button>
-    <a class="pill" href="settings.php">&#9881;</a>
+
+  <!-- Portrait main body -->
+  <div class="main-body" style="flex:1;display:flex;flex-direction:column;min-height:0;min-width:0;">
+    <!-- Portrait hero (hidden in landscape via display:contents trick) -->
+    <div id="heroPortrait"></div>
+    <div class="main-area">
+      <div class="chart-hero">
+        <div class="chart-wrap"><canvas id="chart"></canvas></div>
+      </div>
+    </div>
+    <div class="controls" id="controlsPortrait">
+      <button class="pill accent" id="toggleSensorsP">Sensors</button>
+      <select class="pill" id="daysP">
+        <option value="1">1 day</option>
+        <option value="7"   <?= $config['default_days'] ==  7 ? 'selected' : '' ?>>7 days</option>
+        <option value="14"  <?= $config['default_days'] == 14 ? 'selected' : '' ?>>14 days</option>
+        <option value="30"  <?= $config['default_days'] == 30 ? 'selected' : '' ?>>30 days</option>
+        <option value="90"  <?= $config['default_days'] == 90 ? 'selected' : '' ?>>3 months</option>
+        <option value="365" <?= $config['default_days'] == 365 ? 'selected' : '' ?>>1 year</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="pill" id="updateBtnP">&#8635;</button>
+      <a class="pill" href="settings.php">&#9881;</a>
+    </div>
+    <p class="status-bar" id="status"></p>
   </div>
-  <p class="status-bar" id="status"></p>
+
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
   <div class="sensor-drawer" id="sensorDrawer">
     <div class="drawer-handle"></div>
     <div class="drawer-header"><strong>Sensors</strong><button class="drawer-close" id="drawerClose">&#215;</button></div>
-    <div class="sensor-list" id="sensorList"><span class="spinner"></span> Loading…</div>
+    <div class="sensor-list" id="sensorList"><span class="spinner"></span> Loading&hellip;</div>
   </div>
 
 <script>
@@ -133,8 +256,37 @@ let chart = null;
 let selectedSensors = new Set(defaultSensors);
 let sensorsCache    = null;
 
-document.getElementById('days').value = defaultDays;
+// Sync both days selects
+function getDays() { return parseInt(isLandscape() ? document.getElementById('days').value : document.getElementById('daysP').value); }
+function setDaysValue(v) {
+  document.getElementById('days').value  = v;
+  document.getElementById('daysP').value = v;
+}
+setDaysValue(defaultDays);
+
+function isLandscape() {
+  return window.matchMedia('(max-height:500px) and (orientation:landscape)').matches;
+}
+
 function isDark() { return window.matchMedia('(prefers-color-scheme:dark)').matches; }
+
+// In landscape the sidebar holds heroArea; in portrait we move it to heroPortrait
+function repositionHero() {
+  const heroArea   = document.getElementById('heroArea');
+  const sidebar    = document.getElementById('sidebar');
+  const portrait   = document.getElementById('heroPortrait');
+  const ctrlP      = document.getElementById('controlsPortrait');
+  if (isLandscape()) {
+    // sidebar already has heroArea as first child by default
+    if (heroArea.parentNode !== sidebar) sidebar.insertBefore(heroArea, sidebar.firstChild);
+    ctrlP.style.display = 'none';
+  } else {
+    if (heroArea.parentNode !== portrait) portrait.appendChild(heroArea);
+    ctrlP.style.display = '';
+  }
+}
+repositionHero();
+window.addEventListener('resize', () => { repositionHero(); if (chart) { chart.resize(); } });
 
 // ── Solar math ───────────────────────────────────────────────────────────────────
 const R = Math.PI / 180;
@@ -221,7 +373,7 @@ function typeColor(type, val, alpha=1) {
 async function savePrefs(extra={}){
   try{
     await fetch('api.php?action=save_prefs',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({default_sensors:Array.from(selectedSensors),default_days:parseInt(document.getElementById('days').value),...extra})});
+      body:JSON.stringify({default_sensors:Array.from(selectedSensors),default_days:getDays(),...extra})});
   }catch(e){console.warn('prefs:',e);}
 }
 
@@ -230,12 +382,24 @@ function renderHero(sensorsData){
   if(!sensorsData||!sensorsData.length){hero.innerHTML='<div class="hero-empty">Tap <strong>Sensors</strong> to get started.</div>';return;}
   const sel=sensorsData.filter(s=>selectedSensors.has(s.entity_id)&&!s.hidden);
   if(!sel.length){hero.innerHTML='';return;}
-  hero.innerHTML='<div class="hero">'+sel.map(s=>{
-    const v=parseFloat(s.state);
-    const col=isNaN(v)?'var(--text2)':typeColor(s.type||'temperature',v);
-    const unit=s.unit||(TYPE_CONFIG[s.type||'temperature']?.unit??'\u00b0C');
-    return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
-  }).join('')+'</div>';
+  const landscape = isLandscape();
+  // In landscape: vertical stack (no .hero wrapper needed, cards are direct children)
+  // In portrait: horizontal scroll row
+  if (landscape) {
+    hero.innerHTML = sel.map(s=>{
+      const v=parseFloat(s.state);
+      const col=isNaN(v)?'var(--text2)':typeColor(s.type||'temperature',v);
+      const unit=s.unit||(TYPE_CONFIG[s.type||'temperature']?.unit??'\u00b0C');
+      return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
+    }).join('');
+  } else {
+    hero.innerHTML='<div class="hero">'+sel.map(s=>{
+      const v=parseFloat(s.state);
+      const col=isNaN(v)?'var(--text2)':typeColor(s.type||'temperature',v);
+      const unit=s.unit||(TYPE_CONFIG[s.type||'temperature']?.unit??'\u00b0C');
+      return`<div class="hero-card"><div class="label">${s.name}</div><div class="temp" style="color:${col}">${isNaN(v)?'--':v.toFixed(1)}<span>${unit}</span></div></div>`;
+    }).join('')+'</div>';
+  }
 }
 
 async function loadSensors(){
@@ -250,15 +414,12 @@ async function populateDrawer(){
   list.innerHTML='<span class="spinner"></span> Loading\u2026';
   try{
     const sensors=await loadSensors();renderHero(sensors);
-
     const visibleSensors = sensors.filter(s => !s.hidden);
-
     if (!visibleSensors.length) {
       list.innerHTML = `<p class="drawer-empty">All sensors are hidden.<br><a href="settings.php#sensors">Manage hidden sensors \u2192</a></p>
         <div class="drawer-footer"><a href="settings.php#sensors">Manage hidden sensors \u2192</a></div>`;
       return;
     }
-
     list.innerHTML='';
     const TYPE_ORDER  = ['temperature','co2','humidity','aqi'];
     const TYPE_LABELS = {temperature:'\ud83c\udf21\ufe0f Temperature',co2:'\ud83d\udca8 CO\u2082',humidity:'\ud83d\udca7 Humidity',aqi:'\ud83c\udf2b\ufe0f AQI'};
@@ -282,17 +443,14 @@ async function populateDrawer(){
         list.appendChild(div);
       });
     });
-
     const footer = document.createElement('div');
     footer.className = 'drawer-footer';
     footer.innerHTML = '<a href="settings.php#sensors">Manage hidden sensors \u2192</a>';
     list.appendChild(footer);
-
     list.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',()=>{
       cb.checked?selectedSensors.add(cb.value):selectedSensors.delete(cb.value);
       renderHero(sensorsCache);savePrefs();updateChart();
     }));
-
     list.querySelectorAll('.hide-btn').forEach(btn=>btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
       const s = sensorsCache.find(x => x.entity_id === id);
@@ -310,15 +468,24 @@ async function populateDrawer(){
 
 function openDrawer(){document.getElementById('sensorDrawer').classList.add('open');document.getElementById('drawerBackdrop').classList.add('open');populateDrawer();}
 function closeDrawer(){document.getElementById('sensorDrawer').classList.remove('open');document.getElementById('drawerBackdrop').classList.remove('open');}
-document.getElementById('toggleSensors').addEventListener('click',openDrawer);
+
+// Wire up both sets of controls
+['toggleSensors','toggleSensorsP'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('click',openDrawer);});
 document.getElementById('drawerBackdrop').addEventListener('click',closeDrawer);
 document.getElementById('drawerClose').addEventListener('click',closeDrawer);
-document.getElementById('updateBtn').addEventListener('click',()=>{savePrefs();updateChart();});
-document.getElementById('days').addEventListener('change',()=>{savePrefs();updateChart();});
+['updateBtn','updateBtnP'].forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('click',()=>{savePrefs();updateChart();});});
+['days','daysP'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.addEventListener('change',()=>{
+    setDaysValue(el.value);
+    savePrefs();updateChart();
+  });
+});
 
 // ── Chart update ───────────────────────────────────────────────────────────────
 async function updateChart(){
-  const days=parseInt(document.getElementById('days').value);
+  const days = getDays();
   const activeSensors = sensorsCache
     ? Array.from(selectedSensors).filter(id=>{
         const s=sensorsCache.find(x=>x.entity_id===id);
@@ -342,13 +509,13 @@ async function updateChart(){
       data = JSON.parse(text);
     } catch(parseErr) {
       console.error('JSON parse failed. HTTP', res.status, '\nResponse length:', text.length, '\nFirst 500 chars:', text.slice(0, 500));
-      setStatus(`Error: Response malformed (HTTP ${res.status}, ${text.length} bytes) — check console`);
+      setStatus(`Error: Response malformed (HTTP ${res.status}, ${text.length} bytes) \u2014 check console`);
       return;
     }
     if (!res.ok || !Array.isArray(data)) {
       const msg = data?.error || data?.message || JSON.stringify(data).slice(0, 120);
-      const detail = data?.preview ? ` · preview: ${data.preview.slice(0,80)}` : '';
-      const size   = data?.length  ? ` · ${data.length} bytes` : '';
+      const detail = data?.preview ? ` \u00b7 preview: ${data.preview.slice(0,80)}` : '';
+      const size   = data?.length  ? ` \u00b7 ${data.length} bytes` : '';
       console.error('API error:', data);
       setStatus(`Error (HTTP ${res.status}): ${msg}${size}${detail}`);
       return;
@@ -404,7 +571,7 @@ const dayNightPlugin={
   }
 };
 
-// ── Smooth glow line plugin (all sensor types) ────────────────────────────────────
+// ── Smooth glow line plugin ────────────────────────────────────────────────────────────
 const smoothGlowPlugin={
   id:'smoothGlow',
   beforeDatasetsDraw(ci){
@@ -415,15 +582,12 @@ const smoothGlowPlugin={
       const pts=meta.data,raw=ds.data;
       if(pts.length<2)return;
       const stype=ds._stype||'temperature';
-
       ctx.save();
       const{left,right,top,bottom}=ci.chartArea;
       ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();
-
       const sampleVal=raw.find(p=>p&&p.y!=null)?.y??20;
       const solidColor=typeColor(stype,sampleVal,1);
       const glowColor =typeColor(stype,sampleVal,0.15);
-
       function drawPass(lw,color){
         ctx.lineWidth=lw;ctx.lineJoin='round';ctx.lineCap='round';ctx.strokeStyle=color;
         for(let i=0;i<pts.length-1;i++){
@@ -442,18 +606,10 @@ const smoothGlowPlugin={
           ctx.stroke();
         }
       }
-
-      if(stype==='temperature'){
-        drawPass(12,glowColor);
-        drawPass(3,solidColor);
-      } else {
-        drawPass(12,glowColor);
-        drawPass(2,solidColor);
-      }
-
+      if(stype==='temperature'){ drawPass(12,glowColor); drawPass(3,solidColor); }
+      else { drawPass(12,glowColor); drawPass(2,solidColor); }
       ctx.globalAlpha=1;ctx.restore();
     });
-
     ci.data.datasets.forEach((_,di)=>{
       const o=ci.getDatasetMeta(di).dataset.options;
       if(o){o.borderColor='transparent';o.backgroundColor='transparent';}
@@ -470,6 +626,9 @@ function renderChart(haData){
   const datasets=[];
   let xMin=Infinity,xMax=-Infinity;
   let hasY2=false,hasY3=false;
+  const small = window.innerWidth < 480;      // portrait phone
+  const land  = isLandscape();                 // landscape phone
+  const compact = small || land;
 
   haData.forEach(arr=>{
     if(!arr||!arr.length)return;
@@ -477,18 +636,15 @@ function renderChart(haData){
     const meta=sensorsCache?sensorsCache.find(s=>s.entity_id===eid):null;
     const stype=(meta?.type)||'temperature';
     if(meta?.hidden)return;
-
     const label=arr[0].attributes?.friendly_name||eid;
     const pts=arr
       .map(p=>{const ts=luxon.DateTime.fromISO(p.last_changed).toMillis();const v=parseFloat(p.state);return{x:ts,y:isNaN(v)?null:parseFloat(v.toFixed(2))};})
       .filter(p=>p.y!==null&&!isNaN(p.x));
     if(!pts.length)return;
     xMin=Math.min(xMin,pts[0].x);xMax=Math.max(xMax,pts[pts.length-1].x);
-
     const axisCfg=TYPE_CONFIG[stype]||TYPE_CONFIG.temperature;
     if(axisCfg.axis==='y2')hasY2=true;
     if(axisCfg.axis==='y3')hasY3=true;
-
     datasets.push({
       label,data:pts,
       yAxisID:axisCfg.axis,
@@ -506,6 +662,8 @@ function renderChart(haData){
   const dark=isDark();
   const gridCol=dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.05)';
   const tickCol=dark?'#6b7280':'#9ca3af';
+  const tickSz  = compact ? 9 : 11;
+  const axisTitleDisplay = !compact;   // hide axis titles on small/landscape to save space
 
   chart=new Chart(ctx,{
     type:'line',data:{datasets},
@@ -513,10 +671,11 @@ function renderChart(haData){
       responsive:true,maintainAspectRatio:false,
       animation:{duration:600,easing:'easeInOutQuart'},
       interaction:{mode:'index',intersect:false},
+      layout:{ padding: compact ? { right: hasY2&&hasY3 ? 4 : 2 } : {} },
       plugins:{
         legend:{
-          display:true,
-          labels:{color:tickCol,font:{size:11},boxWidth:12,padding:12,
+          display:!land,  // hide legend in landscape to save vertical space
+          labels:{color:tickCol,font:{size:tickSz},boxWidth:10,padding:8,
             filter:(item,data)=>{
               const ds=data.datasets[item.datasetIndex];
               return ds && ds._stype !== 'temperature';
@@ -527,7 +686,7 @@ function renderChart(haData){
           backgroundColor:dark?'rgba(15,15,19,0.96)':'rgba(255,255,255,0.96)',
           titleColor:dark?'#f1f1f5':'#1a1a2e',bodyColor:dark?'#d1d5db':'#4b5563',
           borderColor:dark?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.08)',
-          borderWidth:1,padding:12,displayColors:true,cornerRadius:10,
+          borderWidth:1,padding:10,displayColors:true,cornerRadius:10,
           callbacks:{
             labelColor:c=>{
               const ds=c.chart.data.datasets[c.datasetIndex];
@@ -545,20 +704,33 @@ function renderChart(haData){
         }
       },
       scales:{
-        x:{type:'time',time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM',month:'MMM yyyy'}},grid:{color:gridCol},border:{display:false},ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:11}}},
-        y:{position:'left',grid:{color:gridCol},border:{display:false},
-          title:{display:true,text:'\u00b0C',color:tickCol,font:{size:11}},
-          ticks:{color:tickCol,font:{size:11},callback:v=>v.toFixed(1)+'\u00b0'}},
+        x:{
+          type:'time',
+          time:{tooltipFormat:'dd MMM HH:mm',displayFormats:{hour:'HH:mm',day:'dd MMM',month:'MMM yy'}},
+          grid:{color:gridCol},border:{display:false},
+          ticks:{color:tickCol,maxRotation:0,autoSkip:true,font:{size:tickSz},
+            maxTicksLimit: compact ? 4 : 8}
+        },
+        y:{
+          position:'left',grid:{color:gridCol},border:{display:false},
+          title:{display:axisTitleDisplay,text:'\u00b0C',color:tickCol,font:{size:tickSz}},
+          ticks:{color:tickCol,font:{size:tickSz},
+            // compact: show integer only e.g. "21°", normal: "21.0°"
+            callback: compact ? v=>Math.round(v)+'\u00b0' : v=>v.toFixed(1)+'\u00b0'
+          }
+        },
         ...(hasY2?{y2:{
           position:'right',grid:{drawOnChartArea:false},border:{display:false},
-          title:{display:true,text:'CO\u2082 (ppm)',color:'rgba(251,146,60,0.9)',font:{size:11}},
-          ticks:{color:'rgba(251,146,60,0.9)',font:{size:11}},
+          title:{display:axisTitleDisplay,text:'CO\u2082 (ppm)',color:'rgba(251,146,60,0.9)',font:{size:tickSz}},
+          ticks:{color:'rgba(251,146,60,0.9)',font:{size:tickSz},
+            callback: compact ? v=>v>=1000?(v/1000).toFixed(1)+'k':v : v=>v
+          },
           min:400,
         }}:{}),
         ...(hasY3?{y3:{
           position:'right',grid:{drawOnChartArea:false},border:{display:false},
-          title:{display:true,text:'% / AQI',color:'rgba(59,130,246,0.9)',font:{size:11}},
-          ticks:{color:'rgba(59,130,246,0.9)',font:{size:11}},
+          title:{display:axisTitleDisplay,text:'% / AQI',color:'rgba(59,130,246,0.9)',font:{size:tickSz}},
+          ticks:{color:'rgba(59,130,246,0.9)',font:{size:tickSz}},
           min:0,
           offset:!!hasY2,
         }}:{}),
